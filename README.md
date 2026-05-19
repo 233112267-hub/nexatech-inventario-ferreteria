@@ -55,4 +55,6 @@ El sistema busca mejorar la organización operativa del negocio mediante herrami
 
 ```bash
 git clone https://github.com/233112267-hub/nexatech-inventario-ferreteria
-cd gestionfacil
+
+# 📄 Licencia
+MIT — NexaTech nexatech-inventario-ferreteria
