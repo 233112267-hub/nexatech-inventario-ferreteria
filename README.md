@@ -18,10 +18,10 @@ El sistema busca mejorar la organización operativa del negocio mediante herrami
 | Nombre | Rol | Usuario GitHub |
 |--------|-----|---------------|
 | Herrera Cruz Vielka Ailyn | Scrum Master | 233112267-hub |
-| Randy Noe  Lopez Lara | QA Engineer | @usuario1 |
+| Randy Noe  Lopez Lara | QA Engineer | RandyLarapy |
 | Zaid Emanuel Hernandez Espinoza | UI/UX Designer | zaid-emanuel |
 | Jorge Saul Gonzalez Lopez| Frontend Developer & Backend| 233110809-ops |
-| Randy Noe  Lopez Lara | Database Developer | @usuario4 |
+| Randy Noe  Lopez Lara | Database Developer | RandyLarapy |
 
 ---
 
