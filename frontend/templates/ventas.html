@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ferretería — Nueva Venta</title>
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="shared.css">
+<style>
+  .ventas-layout { display:grid; grid-template-columns:1fr 400px; gap:1.2rem; align-items:start; }
+
+  /* Left panel */
+  .panel { background:white; border:1px solid var(--border); border-radius:12px; overflow:hidden; }
+  .panel-header { padding:.9rem 1.2rem; border-bottom:1px solid var(--border); }
+  .panel-header h3 { font-size:.95rem; font-weight:800; }
+  .panel-header p  { font-size:.78rem; color:var(--muted); margin-top:2px; }
+
+  .search-prod { padding:.9rem 1.2rem; border-bottom:1px solid var(--border); display:flex; gap:.7rem; align-items:center; }
+  .search-prod .filter-search { flex:1; }
+
+  .btn-scan { display:flex; align-items:center; gap:.4rem; background:none; border:1.5px solid var(--border); border-radius:8px; padding:.48rem .85rem; font-family:'Nunito',sans-serif; font-size:.82rem; font-weight:700; color:var(--text); cursor:pointer; white-space:nowrap; transition:border-color .2s; }
+  .btn-scan:hover { border-color:var(--blue); color:var(--blue); }
+  .btn-scan svg { width:16px; height:16px; }
+
+  /* Product list table */
+  .prod-list table { width:100%; border-collapse:collapse; font-size:.855rem; }
+  .prod-list th { padding:.7rem 1rem; text-align:left; font-size:.68rem; font-weight:700; text-transform:uppercase; letter-spacing:.4px; color:var(--muted); background:#f8fafc; border-bottom:1px solid var(--border); }
+  .prod-list td { padding:.7rem 1rem; border-bottom:1px solid var(--border); vertical-align:middle; }
+  .prod-list tr:last-child td { border-bottom:none; }
+  .prod-list tr:hover td { background:#f8fafc; }
+
+  .prod-thumb { width:34px; height:34px; background:var(--bg); border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:1.1rem; flex-shrink:0; }
+  .prod-cell  { display:flex; align-items:center; gap:.6rem; }
+  .prod-nm    { font-weight:700; font-size:.85rem; }
+  .prod-cd    { font-size:.72rem; color:var(--muted); }
+  .stock-num  { font-weight:800; }
+  .sn-ok  { color:#16a34a; } .sn-low { color:#d97706; } .sn-out { color:#dc2626; }
+
+  .btn-add-prod { width:28px; height:28px; border-radius:7px; border:none; background:var(--blue); color:white; display:flex; align-items:center; justify-content:center; cursor:pointer; transition:opacity .15s; }
+  .btn-add-prod:hover { opacity:.8; }
+  .btn-add-prod svg { width:14px; height:14px; }
+
+  /* Right panel — cart */
+  .cart-header { padding:.9rem 1.2rem; border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; }
+  .cart-header h3 { font-size:.95rem; font-weight:800; }
+  .btn-vaciar { background:none; border:1.5px solid var(--red-bg); border-radius:7px; padding:.3rem .75rem; font-family:'Nunito',sans-serif; font-size:.78rem; font-weight:700; color:var(--red); cursor:pointer; display:flex; align-items:center; gap:.3rem; transition:background .15s; }
+  .btn-vaciar:hover { background:var(--red-bg); }
+  .btn-vaciar svg { width:14px; height:14px; }
+
+  .cart-table { width:100%; border-collapse:collapse; font-size:.82rem; }
+  .cart-table th { padding:.65rem .8rem; text-align:left; font-size:.65rem; font-weight:700; text-transform:uppercase; letter-spacing:.4px; color:var(--muted); background:#f8fafc; border-bottom:1px solid var(--border); }
+  .cart-table td { padding:.6rem .8rem; border-bottom:1px solid var(--border); vertical-align:middle; }
+  .cart-table tr:last-child td { border-bottom:none; }
+  .cart-nm { font-weight:700; font-size:.82rem; }
+
+  .qty-ctrl { display:flex; align-items:center; gap:.3rem; }
+  .qty-btn { width:22px; height:22px; border-radius:5px; border:1.5px solid var(--border); background:white; font-size:.9rem; font-weight:700; cursor:pointer; display:flex; align-items:center; justify-content:center; transition:border-color .15s; }
+  .qty-btn:hover { border-color:var(--blue); color:var(--blue); }
+  .qty-val { width:28px; text-align:center; font-weight:800; font-size:.88rem; }
+
+  .btn-rm { width:24px; height:24px; border-radius:5px; border:none; background:var(--red-bg); color:var(--red); display:flex; align-items:center; justify-content:center; cursor:pointer; transition:opacity .15s; }
+  .btn-rm:hover { opacity:.7; }
+  .btn-rm svg { width:12px; height:12px; }
+
+  /* Summary */
+  .summary { padding:1rem; border-top:1px solid var(--border); }
+  .sum-row { display:flex; justify-content:space-between; padding:.3rem 0; font-size:.86rem; }
+  .sum-row.total { font-size:1.1rem; font-weight:800; padding-top:.6rem; border-top:2px solid var(--border); margin-top:.3rem; }
+  .sum-row.total span:last-child { color:var(--blue); font-size:1.3rem; }
+
+  .discount-row { display:flex; align-items:center; gap:.4rem; }
+  .discount-row input { width:60px; padding:.25rem .4rem; border:1.5px solid var(--border); border-radius:5px; font-family:'Nunito',sans-serif; font-size:.82rem; text-align:right; outline:none; }
+  .discount-row select { padding:.25rem .5rem; border:1.5px solid var(--border); border-radius:5px; font-family:'Nunito',sans-serif; font-size:.82rem; outline:none; }
+
+  /* Sale info */
+  .sale-info { padding:1rem 1.2rem; border-top:1px solid var(--border); }
+  .sale-info h4 { font-size:.82rem; font-weight:800; color:var(--muted); text-transform:uppercase; letter-spacing:.4px; margin-bottom:.8rem; }
+  .info-grid { display:grid; grid-template-columns:1fr 1fr 1fr; gap:.7rem; margin-bottom:1rem; }
+  .info-field label { display:block; font-size:.7rem; font-weight:700; color:var(--muted); margin-bottom:3px; }
+  .info-field select { width:100%; padding:.42rem .6rem; border:1.5px solid var(--border); border-radius:7px; font-family:'Nunito',sans-serif; font-size:.8rem; color:var(--text); outline:none; appearance:none; background:white url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='11' height='11' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2.5'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E") no-repeat right 7px center; }
+
+  .btn-finalizar { width:100%; padding:.8rem; background:var(--blue); color:white; border:none; border-radius:10px; font-family:'Nunito',sans-serif; font-size:.98rem; font-weight:800; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:.5rem; transition:opacity .2s; }
+  .btn-finalizar:hover { opacity:.88; }
+  .btn-finalizar svg { width:18px; height:18px; }
+
+  .empty-cart { padding:2rem; text-align:center; color:var(--muted); font-size:.88rem; font-weight:600; }
+  .empty-cart div { font-size:2rem; margin-bottom:.5rem; }
+
+  @media(max-width:1100px){ .ventas-layout{grid-template-columns:1fr;} }
+</style>
+</head>
+<body>
+
+<aside class="sidebar">
+  <div class="sidebar-brand">
+    <div class="brand-logo">⚙️</div>
+    <div class="brand-text"><strong>FERRETERÍA</strong><small>INVENTARIO Y VENTAS</small></div>
+  </div>
+  <nav>
+    <a class="nav-item" href="dashboard.html"><span class="icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg></span>Dashboard</a>
+    <a class="nav-item" href="usuarios.html"><span class="icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg></span>Usuarios</a>
+    <a class="nav-item" href="productos.html"><span class="icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg></span>Productos</a>
+    <a class="nav-item" href="inventario.html"><span class="icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg></span>Inventario</a>
+    <a class="nav-item" href="movimientos.html"><span class="icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg></span>Movimientos</a>
+    <a class="nav-item active" href="ventas.html"><span class="icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg></span>Ventas</a>
+    <a class="nav-item" href="reportes.html"><span class="icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></span>Reportes</a>
+    <a class="nav-item" href="alertas.html"><span class="icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg></span>Alertas<span class="badge">6</span></a>
+    <a class="nav-item" href="javascript:void(0)"><span class="icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></span>Configuración</a>
+  </nav>
+  <div class="sidebar-user">
+    <div class="avatar">AD</div>
+    <div class="user-info"><strong>Admin</strong><small>Administrador</small></div>
+  </div>
+</aside>
+
+<div class="main">
+  <header class="topbar">
+    <button class="menu-btn" onclick="document.querySelector('.sidebar').classList.toggle('open')">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+    </button>
+    <div class="topbar-right">
+      <button class="icon-btn">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+        <span class="dot">6</span>
+      </button>
+      <a href="login.html" class="btn-logout">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+        Cerrar sesión
+      </a>
+    </div>
+  </header>
+
+  <div class="page-head">
+    <div><h1>Nueva venta</h1><p>Agrega productos y genera una nueva venta.</p></div>
+  </div>
+
+  <div class="content">
+    <div class="ventas-layout">
+
+      <!-- LEFT: product browser -->
+      <div>
+        <div class="panel">
+          <div class="panel-header"><h3>1. Agregar productos</h3></div>
+          <div class="search-prod">
+            <div class="filter-search" style="max-width:none;flex:1;">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+              <input type="text" id="searchProd" placeholder="Buscar producto por nombre, código o código de barras...">
+            </div>
+            <button class="btn-scan">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="3" height="16"/><rect x="7" y="4" width="1" height="16"/><rect x="10" y="4" width="2" height="16"/><rect x="14" y="4" width="1" height="16"/><rect x="17" y="4" width="3" height="16"/></svg>
+              Escanear código
+            </button>
+          </div>
+          <div class="prod-list">
+            <table>
+              <thead><tr><th>Producto</th><th>Código</th><th>Stock</th><th>Precio</th><th>Acción</th></tr></thead>
+              <tbody id="prodTable"></tbody>
+            </table>
+            <div class="pagination" style="background:white;">
+              <div class="pagination-info" id="prodPagInfo"></div>
+              <div class="pagination-btns" id="prodPagBtns"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- RIGHT: cart -->
+      <div>
+        <div class="panel">
+          <div class="cart-header">
+            <h3>2. Productos en la venta</h3>
+            <button class="btn-vaciar" onclick="clearCart()">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
+              Vaciar venta
+            </button>
+          </div>
+          <div id="cartContent">
+            <div class="empty-cart"><div>🛒</div>Agrega productos desde la lista</div>
+          </div>
+          <div class="summary" id="summarySection" style="display:none;">
+            <div class="sum-row"><span style="color:var(--muted);font-weight:600;">Subtotal</span><span id="sumSubtotal">$0.00</span></div>
+            <div class="sum-row">
+              <span style="color:var(--muted);font-weight:600;">Descuento</span>
+              <span class="discount-row">
+                <input type="number" id="discountVal" value="0" min="0" oninput="renderSummary()">
+                <select id="discountType" onchange="renderSummary()"><option value="%">%</option><option value="$">$</option></select>
+                <span id="discountAmount" style="min-width:50px;text-align:right;">$0.00</span>
+              </span>
+            </div>
+            <div class="sum-row"><span style="color:var(--muted);font-weight:600;">Impuestos (16%)</span><span id="sumTax">$0.00</span></div>
+            <div class="sum-row total"><span>Total</span><span id="sumTotal">$0.00</span></div>
+          </div>
+          <div class="sale-info">
+            <h4>3. Información de la venta</h4>
+            <div class="info-grid">
+              <div class="info-field"><label>Cliente (opcional)</label>
+                <select><option>Seleccionar cliente</option><option>Carlos Ruiz</option><option>María López</option><option>Juan Torres</option></select>
+              </div>
+              <div class="info-field"><label>Vendedor</label>
+                <select><option>Admin</option><option>Juan Pérez</option><option>Ana Torres</option></select>
+              </div>
+              <div class="info-field"><label>Método de pago</label>
+                <select><option>Efectivo</option><option>Tarjeta</option><option>Transferencia</option></select>
+              </div>
+            </div>
+            <button class="btn-finalizar" onclick="finalizarVenta()">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>
+              Finalizar venta
+            </button>
+          </div>
+        </div>
+      </div>
+
+    </div>
+    <p style="text-align:center;color:var(--muted);font-size:.78rem;margin-top:1.2rem;">© 2024 Ferretería - Todos los derechos reservados.</p>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modalOK" onclick="if(event.target===this)closeModal('modalOK')">
+  <div class="modal" style="max-width:380px;text-align:center;">
+    <div style="font-size:3rem;margin-bottom:.8rem;">✅</div>
+    <h3 style="margin-bottom:.4rem;">¡Venta registrada!</h3>
+    <p style="color:var(--muted);font-size:.88rem;margin-bottom:1.2rem;" id="ventaFolioMsg"></p>
+    <div style="display:flex;gap:.7rem;justify-content:center;">
+      <button class="btn-cancel" onclick="closeModal('modalOK')">Cerrar</button>
+      <button class="btn-save" onclick="closeModal('modalOK')">Nueva venta</button>
+    </div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+const EMOJIS = { Herramientas:'🔧', Ferretería:'🪛', Materiales:'🧱', Pintura:'🎨', Eléctricos:'⚡', Plomería:'🚿', Seguridad:'🧤' };
+
+const catalog = [
+  { id:1, code:'PROD-001', name:'Taladro inalámbrico 20V',  cat:'Herramientas', stock:15, price:1850 },
+  { id:2, code:'PROD-002', name:'Tornillo para madera 2"',   cat:'Ferretería',   stock:250,price:0.25 },
+  { id:3, code:'PROD-003', name:'Cemento gris 50 kg',        cat:'Materiales',   stock:20, price:195  },
+  { id:4, code:'PROD-004', name:'Pintura blanca 1 galón',    cat:'Pintura',      stock:18, price:240  },
+  { id:5, code:'PROD-005', name:'Disco de corte 4 1/2"',     cat:'Herramientas', stock:2,  price:32   },
+  { id:6, code:'PROD-006', name:'Cinta aislante negra',      cat:'Eléctricos',   stock:45, price:18   },
+  { id:7, code:'PROD-007', name:'Tubo PVC 1/2"',             cat:'Plomería',     stock:60, price:18   },
+  { id:8, code:'PROD-008', name:'Cinta métrica 5m',          cat:'Herramientas', stock:12, price:85   },
+  { id:9, code:'PROD-009', name:'Guantes de trabajo',        cat:'Seguridad',    stock:30, price:45   },
+  { id:10,code:'PROD-010', name:'Interruptor doble',         cat:'Eléctricos',   stock:0,  price:65   },
+];
+
+let cart = [];
+let prodPage = 1;
+let filteredCatalog = [...catalog];
+const PROD_PAGE = 8;
+
+// ── PRODUCT TABLE ────────────────────────────────────
+function renderProdTable() {
+  const start=(prodPage-1)*PROD_PAGE;
+  const slice=filteredCatalog.slice(start,start+PROD_PAGE);
+  const stockClass = s => s===0?'sn-out':s<=5?'sn-low':'sn-ok';
+
+  document.getElementById('prodTable').innerHTML = slice.map(p=>`
+    <tr>
+      <td><div class="prod-cell"><div class="prod-thumb">${EMOJIS[p.cat]||'📦'}</div><div><div class="prod-nm">${p.name}</div></div></div></td>
+      <td style="font-family:monospace;font-size:.75rem;color:var(--muted);">${p.code}</td>
+      <td><span class="stock-num ${stockClass(p.stock)}">${p.stock}</span></td>
+      <td style="font-weight:700;">$${p.price.toFixed(2)}</td>
+      <td>${p.stock>0?`<button class="btn-add-prod" onclick="addToCart(${p.id})" title="Agregar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button>`:`<span style="font-size:.72rem;color:var(--red);font-weight:700;">Agotado</span>`}</td>
+    </tr>`).join('');
+
+  const total=Math.ceil(filteredCatalog.length/PROD_PAGE);
+  document.getElementById('prodPagInfo').textContent=`${start+1}–${Math.min(start+PROD_PAGE,filteredCatalog.length)} de ${filteredCatalog.length}`;
+  let btns=`<button class="page-btn" onclick="goPageP(${prodPage-1})" ${prodPage===1?'disabled':''}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg></button>`;
+  for(let i=1;i<=total;i++) btns+=`<button class="page-btn ${i===prodPage?'active':''}" onclick="goPageP(${i})">${i}</button>`;
+  btns+=`<button class="page-btn" onclick="goPageP(${prodPage+1})" ${prodPage===total||total===0?'disabled':''}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg></button>`;
+  document.getElementById('prodPagBtns').innerHTML=btns;
+}
+function goPageP(p){const t=Math.ceil(filteredCatalog.length/PROD_PAGE);if(p<1||p>t)return;prodPage=p;renderProdTable();}
+
+document.getElementById('searchProd').addEventListener('input',function(){
+  const q=this.value.toLowerCase();
+  filteredCatalog=catalog.filter(p=>p.name.toLowerCase().includes(q)||p.code.toLowerCase().includes(q));
+  prodPage=1;renderProdTable();
+});
+
+// ── CART ─────────────────────────────────────────────
+function addToCart(id) {
+  const p=catalog.find(x=>x.id===id);
+  const inCart=cart.find(x=>x.id===id);
+  if(inCart){ if(inCart.qty<p.stock){inCart.qty++;renderCart();showToast(`+1 ${p.name}`,'success');} else showToast('Stock insuficiente','error'); }
+  else { cart.push({id:p.id,name:p.name,cat:p.cat,price:p.price,qty:1,stock:p.stock}); renderCart(); showToast(`${p.name} agregado`,'success'); }
+}
+
+function changeQty(id,delta){
+  const item=cart.find(x=>x.id===id);
+  if(!item)return;
+  item.qty+=delta;
+  if(item.qty<=0) cart=cart.filter(x=>x.id!==id);
+  else if(item.qty>item.stock){item.qty=item.stock;showToast('Stock máximo alcanzado','error');}
+  renderCart();
+}
+
+function removeFromCart(id){ cart=cart.filter(x=>x.id!==id); renderCart(); }
+function clearCart(){ cart=[]; renderCart(); }
+
+function renderCart() {
+  const cc=document.getElementById('cartContent');
+  const ss=document.getElementById('summarySection');
+  if(cart.length===0){
+    cc.innerHTML='<div class="empty-cart"><div>🛒</div>Agrega productos desde la lista</div>';
+    ss.style.display='none'; return;
+  }
+  cc.innerHTML=`<table class="cart-table">
+    <thead><tr><th>Producto</th><th>Precio</th><th>Cantidad</th><th>Subtotal</th><th></th></tr></thead>
+    <tbody>${cart.map(item=>`<tr>
+      <td><div class="prod-cell"><div class="prod-thumb" style="width:28px;height:28px;font-size:.9rem;">${EMOJIS[item.cat]||'📦'}</div><span class="cart-nm">${item.name}</span></div></td>
+      <td style="font-weight:700;">$${item.price.toFixed(2)}</td>
+      <td><div class="qty-ctrl">
+        <button class="qty-btn" onclick="changeQty(${item.id},-1)">−</button>
+        <span class="qty-val">${item.qty}</span>
+        <button class="qty-btn" onclick="changeQty(${item.id},1)">+</button>
+      </div></td>
+      <td style="font-weight:800;">$${(item.price*item.qty).toFixed(2)}</td>
+      <td><button class="btn-rm" onclick="removeFromCart(${item.id})"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg></button></td>
+    </tr>`).join('')}</tbody>
+  </table>`;
+  ss.style.display='';
+  renderSummary();
+}
+
+function renderSummary(){
+  const sub=cart.reduce((s,i)=>s+i.price*i.qty,0);
+  const dv=parseFloat(document.getElementById('discountVal').value)||0;
+  const dt=document.getElementById('discountType').value;
+  const disc=dt==='%'?sub*(dv/100):Math.min(dv,sub);
+  const tax=(sub-disc)*0.16;
+  const total=sub-disc+tax;
+  document.getElementById('sumSubtotal').textContent=`$${sub.toFixed(2)}`;
+  document.getElementById('discountAmount').textContent=`-$${disc.toFixed(2)}`;
+  document.getElementById('sumTax').textContent=`$${tax.toFixed(2)}`;
+  document.getElementById('sumTotal').textContent=`$${total.toFixed(2)}`;
+}
+
+function finalizarVenta(){
+  if(cart.length===0){showToast('Agrega al menos un producto','error');return;}
+  const folio='VTA-'+String(Math.floor(Math.random()*9000)+1000);
+  document.getElementById('ventaFolioMsg').textContent=`Folio: ${folio} — Total: ${document.getElementById('sumTotal').textContent}`;
+  cart=[];renderCart();
+  openModal('modalOK');
+}
+
+function openModal(id){document.getElementById(id).classList.add('show');}
+function closeModal(id){document.getElementById(id).classList.remove('show');}
+function showToast(msg,type='success'){
+  const t=document.getElementById('toast');
+  t.textContent=(type==='success'?'✓ ':'⚠ ')+msg;
+  t.className=`toast ${type} show`;
+  setTimeout(()=>t.classList.remove('show'),2500);
+}
+document.addEventListener('keydown',e=>{if(e.key==='Escape')closeModal('modalOK');});
+
+renderProdTable();
+</script>
+</body>
+</html>

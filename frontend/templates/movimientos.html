@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ferretería — Movimientos</title>
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="shared.css">
+<style>
+  .mov-badge {
+    display:inline-flex; align-items:center; gap:5px;
+    padding:3px 10px; border-radius:20px; font-size:.72rem; font-weight:700; white-space:nowrap;
+  }
+  .mov-entrada { background:#dcfce7; color:#16a34a; }
+  .mov-salida  { background:#fee2e2; color:#dc2626; }
+  .mov-ajuste  { background:#fef3c7; color:#d97706; }
+
+  .qty-pos { color:#16a34a; font-weight:800; }
+  .qty-neg { color:#dc2626; font-weight:800; }
+
+  .prod-cell  { display:flex; align-items:center; gap:.6rem; }
+  .prod-thumb { width:34px; height:34px; background:var(--bg); border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:1.1rem; flex-shrink:0; }
+  .prod-name  { font-weight:700; font-size:.86rem; }
+  .prod-code  { font-size:.72rem; color:var(--muted); }
+
+  .date-input { padding:.45rem .8rem; border:1.5px solid var(--border); border-radius:7px; font-family:'Nunito',sans-serif; font-size:.83rem; color:var(--text); outline:none; transition:border-color .2s; background:white; }
+  .date-input:focus { border-color:var(--blue); }
+
+  .btn-export {
+    display:flex; align-items:center; gap:.4rem;
+    background:white; border:1.5px solid var(--border); border-radius:9px;
+    padding:.55rem 1.1rem; font-family:'Nunito',sans-serif; font-size:.86rem;
+    font-weight:700; color:var(--text); cursor:pointer; transition:border-color .2s;
+  }
+  .btn-export:hover { border-color:var(--blue); color:var(--blue); }
+  .btn-export svg { width:16px; height:16px; }
+</style>
+</head>
+<body>
+
+<aside class="sidebar">
+  <div class="sidebar-brand">
+    <div class="brand-logo">⚙️</div>
+    <div class="brand-text"><strong>FERRETERÍA</strong><small>INVENTARIO Y VENTAS</small></div>
+  </div>
+  <nav>
+    <a class="nav-item" href="dashboard.html"><span class="icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg></span>Dashboard</a>
+    <a class="nav-item" href="usuarios.html"><span class="icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg></span>Usuarios</a>
+    <a class="nav-item" href="productos.html"><span class="icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg></span>Productos</a>
+    <a class="nav-item" href="inventario.html"><span class="icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg></span>Inventario</a>
+    <a class="nav-item active" href="movimientos.html"><span class="icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg></span>Movimientos</a>
+    <a class="nav-item" href="ventas.html"><span class="icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg></span>Ventas</a>
+    <a class="nav-item" href="reportes.html"><span class="icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></span>Reportes</a>
+    <a class="nav-item" href="alertas.html"><span class="icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg></span>Alertas<span class="badge">6</span></a>
+    <a class="nav-item" href="javascript:void(0)"><span class="icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></span>Configuración</a>
+  </nav>
+  <div class="sidebar-user">
+    <div class="avatar">AD</div>
+    <div class="user-info"><strong>Admin</strong><small>Administrador</small></div>
+  </div>
+</aside>
+
+<div class="main">
+  <header class="topbar">
+    <button class="menu-btn" onclick="document.querySelector('.sidebar').classList.toggle('open')">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+    </button>
+    <div class="topbar-right">
+      <button class="icon-btn">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+        <span class="dot">6</span>
+      </button>
+      <a href="login.html" class="btn-logout">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+        Cerrar sesión
+      </a>
+    </div>
+  </header>
+
+  <div class="page-head">
+    <div>
+      <h1>Movimientos de inventario</h1>
+      <p>Consulta el historial de entradas y salidas de productos.</p>
+    </div>
+    <button class="btn-export" onclick="showToast('Exportando datos...','success')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+      Exportar
+    </button>
+  </div>
+
+  <div class="content">
+    <!-- Filters -->
+    <div class="filters" style="flex-wrap:wrap;">
+      <div class="filter-search">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <input type="text" id="searchInput" placeholder="Buscar producto, código o referencia...">
+      </div>
+      <div class="filter-group">
+        <label>Tipo de movimiento</label>
+        <select id="tipoFilter">
+          <option value="">Todos</option>
+          <option value="Entrada">Entrada</option>
+          <option value="Salida">Salida</option>
+          <option value="Ajuste">Ajuste</option>
+        </select>
+      </div>
+      <div class="filter-group">
+        <label>Fecha desde</label>
+        <input type="date" class="date-input" id="dateFrom" value="2024-05-01">
+      </div>
+      <div class="filter-group">
+        <label>Fecha hasta</label>
+        <input type="date" class="date-input" id="dateTo" value="2024-05-15">
+      </div>
+      <button class="btn-clear" onclick="clearFilters()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        Limpiar filtros
+      </button>
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Fecha y hora</th><th>Tipo</th><th>Producto</th>
+            <th>Referencia</th><th>Cantidad</th><th>Stock anterior</th>
+            <th>Stock actual</th><th>Usuario</th><th>Acciones</th>
+          </tr>
+        </thead>
+        <tbody id="tableBody"></tbody>
+      </table>
+      <div class="pagination">
+        <div class="pagination-info" id="paginationInfo"></div>
+        <div class="pagination-btns" id="paginationBtns"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Detail modal -->
+<div class="modal-overlay" id="modalDetail" onclick="if(event.target===this)closeModal('modalDetail')">
+  <div class="modal" style="max-width:440px;">
+    <div class="modal-header">
+      <h3>Detalle del movimiento</h3>
+      <button class="modal-close" onclick="closeModal('modalDetail')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+    </div>
+    <div id="detailBody"></div>
+    <div class="modal-footer"><button class="btn-cancel" onclick="closeModal('modalDetail')">Cerrar</button></div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+const EMOJIS = { Herramientas:'🔧', Ferretería:'🪛', Materiales:'🧱', Pintura:'🎨', Eléctricos:'⚡', Plomería:'🚿', Seguridad:'🧤' };
+
+const movimientos = [
+  { id:1,  fecha:'15/05/2024', hora:'10:30 a.m.', tipo:'Entrada', producto:'Cemento gris 50 kg',        codigo:'PROD-003', cat:'Materiales', ref:'Compra #C-00125', qty:50,  prev:'-',  curr:50,  user:'Admin'       },
+  { id:2,  fecha:'15/05/2024', hora:'09:15 a.m.', tipo:'Salida',  producto:'Tornillo para madera 2"',   codigo:'PROD-002', cat:'Ferretería', ref:'Venta #V-00089',  qty:-10, prev:260,  curr:250, user:'Juan Pérez'   },
+  { id:3,  fecha:'14/05/2024', hora:'04:45 p.m.', tipo:'Entrada', producto:'Pintura blanca 1 galón',    codigo:'PROD-004', cat:'Pintura',    ref:'Compra #C-00124', qty:20,  prev:'-',  curr:20,  user:'María López'  },
+  { id:4,  fecha:'14/05/2024', hora:'11:20 a.m.', tipo:'Salida',  producto:'Disco de corte 4 1/2"',     codigo:'PROD-005', cat:'Herramientas',ref:'Venta #V-00088', qty:-5,  prev:25,   curr:20,  user:'Ana Torres'   },
+  { id:5,  fecha:'13/05/2024', hora:'02:10 p.m.', tipo:'Entrada', producto:'Cable eléctrico 12 AWG',    codigo:'PROD-006', cat:'Eléctricos', ref:'Compra #C-00123', qty:100, prev:'-',  curr:100, user:'Admin'        },
+  { id:6,  fecha:'13/05/2024', hora:'10:05 a.m.', tipo:'Ajuste',  producto:'Guantes de trabajo',        codigo:'PROD-007', cat:'Seguridad',  ref:'Ajuste de inventario', qty:-2, prev:15, curr:13, user:'Admin'      },
+  { id:7,  fecha:'12/05/2024', hora:'03:30 p.m.', tipo:'Entrada', producto:'Cinta métrica 5m',          codigo:'PROD-008', cat:'Herramientas',ref:'Compra #C-00122', qty:15,  prev:'-',  curr:15,  user:'Luis Martínez'},
+  { id:8,  fecha:'12/05/2024', hora:'09:45 a.m.', tipo:'Salida',  producto:'Tubo PVC 1/2"',             codigo:'PROD-009', cat:'Plomería',   ref:'Venta #V-00087',  qty:-8,  prev:18,   curr:10,  user:'Juan Pérez'   },
+  { id:9,  fecha:'11/05/2024', hora:'04:00 p.m.', tipo:'Entrada', producto:'Taladro inalámbrico 20V',   codigo:'PROD-001', cat:'Herramientas',ref:'Compra #C-00121', qty:10,  prev:5,    curr:15,  user:'Admin'        },
+  { id:10, fecha:'11/05/2024', hora:'11:30 a.m.', tipo:'Salida',  producto:'Pintura esmalte negro',     codigo:'PROD-011', cat:'Pintura',    ref:'Venta #V-00086',  qty:-3,  prev:17,   curr:14,  user:'Ana Torres'   },
+  { id:11, fecha:'10/05/2024', hora:'02:20 p.m.', tipo:'Ajuste',  producto:'Sellador acrílico',         codigo:'PROD-012', cat:'Materiales', ref:'Ajuste de inventario', qty:-1, prev:7, curr:6,  user:'Admin'        },
+  { id:12, fecha:'10/05/2024', hora:'09:00 a.m.', tipo:'Entrada', producto:'Tornillo para madera 2"',   codigo:'PROD-002', cat:'Ferretería', ref:'Compra #C-00120', qty:50,  prev:210,  curr:260, user:'María López'  },
+];
+
+const PAGE = 8;
+let page = 1;
+let filtered = [...movimientos];
+
+function movBadge(t) {
+  const cls = t==='Entrada'?'mov-entrada':t==='Salida'?'mov-salida':'mov-ajuste';
+  const arrow = t==='Entrada'
+    ? '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>'
+    : t==='Salida'
+    ? '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/></svg>'
+    : '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/></svg>';
+  return `<span class="mov-badge ${cls}">${arrow}${t}</span>`;
+}
+
+function render() {
+  const start=(page-1)*PAGE;
+  const slice=filtered.slice(start,start+PAGE);
+  document.getElementById('tableBody').innerHTML = slice.map(m=>`
+    <tr>
+      <td style="white-space:nowrap;"><div style="font-weight:700;font-size:.82rem;">${m.fecha}</div><div style="font-size:.74rem;color:var(--muted);">${m.hora}</div></td>
+      <td>${movBadge(m.tipo)}</td>
+      <td><div class="prod-cell"><div class="prod-thumb">${EMOJIS[m.cat]||'📦'}</div><div><div class="prod-name">${m.producto}</div><div class="prod-code">${m.codigo}</div></div></div></td>
+      <td style="font-size:.8rem;color:var(--muted);">${m.ref}</td>
+      <td class="${m.qty>0?'qty-pos':'qty-neg'}">${m.qty>0?'+'+m.qty:m.qty}</td>
+      <td style="color:var(--muted);font-weight:600;">${m.prev}</td>
+      <td style="font-weight:700;">${m.curr}</td>
+      <td style="font-size:.82rem;">${m.user}</td>
+      <td><button class="act-btn act-edit" onclick="showDetail(${m.id})" title="Ver detalle" style="width:auto;padding:0 .7rem;font-family:inherit;font-size:.76rem;font-weight:700;">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:13px;height:13px;margin-right:3px;"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>Ver detalle</button></td>
+    </tr>`).join('');
+
+  const total=Math.ceil(filtered.length/PAGE);
+  document.getElementById('paginationInfo').textContent=`Mostrando 1 a ${Math.min(start+PAGE,filtered.length)} de ${filtered.length} movimientos`;
+  let btns=`<button class="page-btn" onclick="goPage(${page-1})" ${page===1?'disabled':''}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg></button>`;
+  for(let i=1;i<=total;i++) btns+=`<button class="page-btn ${i===page?'active':''}" onclick="goPage(${i})">${i}</button>`;
+  btns+=`<button class="page-btn" onclick="goPage(${page+1})" ${page===total||total===0?'disabled':''}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg></button>`;
+  document.getElementById('paginationBtns').innerHTML=btns;
+}
+function goPage(p){const t=Math.ceil(filtered.length/PAGE);if(p<1||p>t)return;page=p;render();}
+
+function applyFilters(){
+  const q=document.getElementById('searchInput').value.toLowerCase();
+  const tipo=document.getElementById('tipoFilter').value;
+  filtered=movimientos.filter(m=>
+    (!q||m.producto.toLowerCase().includes(q)||m.codigo.toLowerCase().includes(q)||m.ref.toLowerCase().includes(q))&&
+    (!tipo||m.tipo===tipo)
+  );
+  page=1;render();
+}
+function clearFilters(){
+  document.getElementById('searchInput').value='';
+  document.getElementById('tipoFilter').value='';
+  filtered=[...movimientos];page=1;render();
+}
+['searchInput','tipoFilter'].forEach(id=>document.getElementById(id).addEventListener(id==='searchInput'?'input':'change',applyFilters));
+
+function showDetail(id){
+  const m=movimientos.find(x=>x.id===id);
+  document.getElementById('detailBody').innerHTML=`
+    <table style="width:100%;border-collapse:collapse;">
+      ${[['Tipo',movBadge(m.tipo)],['Producto',`<strong>${m.producto}</strong>`],['Código',`<code style="background:#f1f5f9;padding:2px 7px;border-radius:5px;">${m.codigo}</code>`],
+         ['Referencia',m.ref],['Cantidad',`<span class="${m.qty>0?'qty-pos':'qty-neg'}">${m.qty>0?'+'+m.qty:m.qty}</span>`],
+         ['Stock anterior',m.prev],['Stock actual',`<strong>${m.curr}</strong>`],
+         ['Fecha',`${m.fecha} ${m.hora}`],['Usuario',m.user]
+        ].map(([k,v])=>`<tr><td style="padding:.45rem .3rem;color:var(--muted);font-weight:700;font-size:.8rem;width:40%;">${k}</td><td style="padding:.45rem .3rem;font-size:.85rem;">${v}</td></tr>`).join('')}
+    </table>`;
+  openModal('modalDetail');
+}
+
+function openModal(id){document.getElementById(id).classList.add('show');}
+function closeModal(id){document.getElementById(id).classList.remove('show');}
+function showToast(msg,type='success'){
+  const t=document.getElementById('toast');
+  t.textContent=(type==='success'?'✓ ':'⚠ ')+msg;
+  t.className=`toast ${type} show`;
+  setTimeout(()=>t.classList.remove('show'),3000);
+}
+document.addEventListener('keydown',e=>{if(e.key==='Escape')closeModal('modalDetail');});
+render();
+</script>
+</body>
+</html>
