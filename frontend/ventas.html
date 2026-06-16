@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ferretería — Nueva Venta</title>
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="shared.css">
+<style>
+  .ventas-layout{display:grid;grid-template-columns:1fr 400px;gap:1.2rem;align-items:start;}
+  .panel{background:white;border:1px solid var(--border);border-radius:12px;overflow:hidden;}
+  .panel-header{padding:.9rem 1.2rem;border-bottom:1px solid var(--border);}
+  .panel-header h3{font-size:.95rem;font-weight:800;}
+  .search-prod{padding:.9rem 1.2rem;border-bottom:1px solid var(--border);display:flex;gap:.7rem;align-items:center;}
+  .prod-list table{width:100%;border-collapse:collapse;font-size:.855rem;}
+  .prod-list th{padding:.7rem 1rem;text-align:left;font-size:.68rem;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);background:#f8fafc;border-bottom:1px solid var(--border);}
+  .prod-list td{padding:.7rem 1rem;border-bottom:1px solid var(--border);vertical-align:middle;}
+  .prod-list tr:last-child td{border-bottom:none;}
+  .prod-list tr:hover td{background:#f8fafc;}
+  .prod-thumb{width:34px;height:34px;background:var(--bg);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:1.1rem;flex-shrink:0;}
+  .prod-cell{display:flex;align-items:center;gap:.6rem;}
+  .btn-add-prod{width:28px;height:28px;border-radius:7px;border:none;background:var(--blue);color:white;display:flex;align-items:center;justify-content:center;cursor:pointer;transition:opacity .15s;}
+  .btn-add-prod:hover{opacity:.8;}
+  .btn-add-prod svg{width:14px;height:14px;}
+  .sn-ok{color:#16a34a;font-weight:800;}.sn-low{color:#d97706;font-weight:800;}.sn-out{color:#dc2626;font-weight:800;}
+  .cart-header{padding:.9rem 1.2rem;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;}
+  .cart-header h3{font-size:.95rem;font-weight:800;}
+  .btn-vaciar{background:none;border:1.5px solid var(--red-bg);border-radius:7px;padding:.3rem .75rem;font-family:'Nunito',sans-serif;font-size:.78rem;font-weight:700;color:var(--red);cursor:pointer;display:flex;align-items:center;gap:.3rem;transition:background .15s;}
+  .btn-vaciar:hover{background:var(--red-bg);}
+  .cart-table{width:100%;border-collapse:collapse;font-size:.82rem;}
+  .cart-table th{padding:.65rem .8rem;text-align:left;font-size:.65rem;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);background:#f8fafc;border-bottom:1px solid var(--border);}
+  .cart-table td{padding:.6rem .8rem;border-bottom:1px solid var(--border);vertical-align:middle;}
+  .cart-table tr:last-child td{border-bottom:none;}
+  .qty-ctrl{display:flex;align-items:center;gap:.3rem;}
+  .qty-btn{width:22px;height:22px;border-radius:5px;border:1.5px solid var(--border);background:white;font-size:.9rem;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:border-color .15s;}
+  .qty-btn:hover{border-color:var(--blue);color:var(--blue);}
+  .qty-val{width:28px;text-align:center;font-weight:800;font-size:.88rem;}
+  .btn-rm{width:24px;height:24px;border-radius:5px;border:none;background:var(--red-bg);color:var(--red);display:flex;align-items:center;justify-content:center;cursor:pointer;}
+  .btn-rm svg{width:12px;height:12px;}
+  .summary{padding:1rem;border-top:1px solid var(--border);}
+  .sum-row{display:flex;justify-content:space-between;padding:.3rem 0;font-size:.86rem;}
+  .sum-row.total{font-size:1.1rem;font-weight:800;padding-top:.6rem;border-top:2px solid var(--border);margin-top:.3rem;}
+  .sum-row.total span:last-child{color:var(--blue);font-size:1.3rem;}
+  .sale-info{padding:1rem 1.2rem;border-top:1px solid var(--border);}
+  .sale-info h4{font-size:.82rem;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:.8rem;}
+  .info-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:.7rem;margin-bottom:1rem;}
+  .info-field label{display:block;font-size:.7rem;font-weight:700;color:var(--muted);margin-bottom:3px;}
+  .info-field select{width:100%;padding:.42rem .6rem;border:1.5px solid var(--border);border-radius:7px;font-family:'Nunito',sans-serif;font-size:.8rem;color:var(--text);outline:none;appearance:none;background:white url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='11' height='11' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2.5'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E") no-repeat right 7px center;}
+  .btn-finalizar{width:100%;padding:.8rem;background:var(--blue);color:white;border:none;border-radius:10px;font-family:'Nunito',sans-serif;font-size:.98rem;font-weight:800;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:.5rem;transition:opacity .2s;}
+  .btn-finalizar:hover{opacity:.88;}
+  .btn-finalizar svg{width:18px;height:18px;}
+  .btn-finalizar.loading{opacity:.7;pointer-events:none;}
+  .empty-cart{padding:2rem;text-align:center;color:var(--muted);font-size:.88rem;font-weight:600;}
+  .empty-cart div{font-size:2rem;margin-bottom:.5rem;}
+  @media(max-width:1100px){.ventas-layout{grid-template-columns:1fr;}}
+</style>
+</head>
+<body>
+<aside class="sidebar">
+  <div class="sidebar-brand"><div class="brand-logo">⚙️</div><div class="brand-text"><strong>FERRETERÍA</strong><small>INVENTARIO Y VENTAS</small></div></div>
+  <nav>
+    <a class="nav-item" href="dashboard.html"><span class="icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg></span>Dashboard</a>
+    <a class="nav-item" href="usuarios.html"><span class="icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg></span>Usuarios</a>
+    <a class="nav-item" href="productos.html"><span class="icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg></span>Productos</a>
+    <a class="nav-item" href="inventario.html"><span class="icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/></svg></span>Inventario</a>
+    <a class="nav-item" href="movimientos.html"><span class="icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg></span>Movimientos</a>
+    <a class="nav-item active" href="ventas.html"><span class="icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg></span>Ventas</a>
+    <a class="nav-item" href="reportes.html"><span class="icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></span>Reportes</a>
+    <a class="nav-item" href="alertas.html"><span class="icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg></span>Alertas<span class="badge" id="alertBadge">0</span></a>
+  </nav>
+  <div class="sidebar-user"><div class="avatar">AD</div><div class="user-info"><strong class="user-name-display">Admin</strong><small class="user-role-display">Administrador</small></div></div>
+</aside>
+
+<div class="main">
+  <header class="topbar">
+    <button class="menu-btn" onclick="document.querySelector('.sidebar').classList.toggle('open')"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg></button>
+    <div class="topbar-right">
+      <button class="icon-btn"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg><span class="dot" id="alertDot">0</span></button>
+      <a href="login.html" class="btn-logout"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>Cerrar sesión</a>
+    </div>
+  </header>
+  <div class="page-head"><div><h1>Nueva venta</h1><p>Agrega productos y genera una nueva venta.</p></div></div>
+  <div class="content">
+    <div class="ventas-layout">
+      <!-- Izquierda: catálogo -->
+      <div class="panel">
+        <div class="panel-header"><h3>1. Agregar productos</h3></div>
+        <div class="search-prod">
+          <div class="filter-search" style="max-width:none;flex:1;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg><input type="text" id="searchProd" placeholder="Buscar producto por nombre o código..."></div>
+        </div>
+        <div class="prod-list">
+          <table><thead><tr><th>Producto</th><th>Código</th><th>Stock</th><th>Precio</th><th>Acción</th></tr></thead>
+          <tbody id="prodTable"><tr><td colspan="5" style="text-align:center;padding:2rem;color:var(--muted);">Cargando...</td></tr></tbody></table>
+          <div class="pagination" style="background:white;"><div class="pagination-info" id="prodPagInfo"></div><div class="pagination-btns" id="prodPagBtns"></div></div>
+        </div>
+      </div>
+      <!-- Derecha: carrito -->
+      <div class="panel">
+        <div class="cart-header">
+          <h3>2. Productos en la venta</h3>
+          <button class="btn-vaciar" onclick="clearCart()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>Vaciar</button>
+        </div>
+        <div id="cartContent"><div class="empty-cart"><div>🛒</div>Agrega productos desde la lista</div></div>
+        <div class="summary" id="summarySection" style="display:none;">
+          <div class="sum-row"><span style="color:var(--muted);font-weight:600;">Subtotal</span><span id="sumSubtotal">$0.00</span></div>
+          <div class="sum-row"><span style="color:var(--muted);font-weight:600;">Impuestos (16%)</span><span id="sumTax">$0.00</span></div>
+          <div class="sum-row total"><span>Total</span><span id="sumTotal">$0.00</span></div>
+        </div>
+        <div class="sale-info">
+          <h4>3. Información de la venta</h4>
+          <div class="info-grid">
+            <div class="info-field"><label>Cliente (opcional)</label><input type="text" id="saleCliente" placeholder="Nombre del cliente" style="width:100%;padding:.42rem .6rem;border:1.5px solid var(--border);border-radius:7px;font-family:'Nunito',sans-serif;font-size:.8rem;outline:none;"></div>
+            <div class="info-field"><label>Método de pago</label><select id="salePago"><option>Efectivo</option><option>Tarjeta</option><option>Transferencia</option></select></div>
+            <div class="info-field"><label>Vendedor</label><select id="saleVendedor"><option value="">Auto</option></select></div>
+          </div>
+          <button class="btn-finalizar" id="btnFinalizar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>Finalizar venta</button>
+        </div>
+      </div>
+    </div>
+    <p style="text-align:center;color:var(--muted);font-size:.78rem;margin-top:1.2rem;">© 2024 Ferretería — Todos los derechos reservados.</p>
+  </div>
+</div>
+
+<!-- Modal éxito -->
+<div class="modal-overlay" id="modalOK" onclick="if(event.target===this)closeModal('modalOK')">
+  <div class="modal" style="max-width:380px;text-align:center;">
+    <div style="font-size:3rem;margin-bottom:.8rem;">✅</div>
+    <h3 style="margin-bottom:.4rem;">¡Venta registrada!</h3>
+    <p style="color:var(--muted);font-size:.88rem;margin-bottom:1.2rem;" id="ventaFolioMsg"></p>
+    <div style="display:flex;gap:.7rem;justify-content:center;">
+      <button class="btn-cancel" onclick="closeModal('modalOK')">Cerrar</button>
+      <a href="movimientos.html" class="btn-save" style="text-decoration:none;display:inline-flex;align-items:center;">Ver movimientos</a>
+    </div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+<script src="shared.js"></script>
+<script>
+checkAuth(); setupLogout(); renderUserInfo();
+const EMOJIS={Herramientas:'🔧',Ferretería:'🪛',Materiales:'🧱',Pintura:'🎨',Eléctricos:'⚡',Plomería:'🚿',Seguridad:'🧤'};
+let cart=[], prodPage=1, allProds=[], filteredProds=[];
+
+// Cargar productos del API
+async function loadProds(){
+  const q=document.getElementById('searchProd').value;
+  const params=new URLSearchParams({page:prodPage,limit:8,estado:'Activo',...(q&&{search:q})});
+  const data=await apiFetch('/productos?'+params);
+  if(!data||!data.ok) return;
+  allProds=data.data;
+  document.getElementById('prodTable').innerHTML=allProds.map(p=>{
+    const sc=p.stock===0?'sn-out':p.stock<=p.stock_minimo?'sn-low':'sn-ok';
+    return `<tr>
+      <td><div class="prod-cell"><div class="prod-thumb">${EMOJIS[p.categoria]||'📦'}</div><span style="font-weight:700;">${p.nombre}</span></div></td>
+      <td style="font-family:monospace;font-size:.75rem;color:var(--muted);">${p.codigo}</td>
+      <td><span class="${sc}">${p.stock}</span></td>
+      <td style="font-weight:700;">$${Number(p.precio).toFixed(2)}</td>
+      <td>${p.stock>0?`<button class="btn-add-prod" onclick="addToCart(${p.id},'${p.nombre.replace(/'/g,"\\'")}','${p.categoria}',${p.precio},${p.stock})" title="Agregar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button>`:'<span style="font-size:.72rem;color:var(--red);font-weight:700;">Agotado</span>'}</td>
+    </tr>`;
+  }).join('');
+  renderPagination('prodPagBtns','prodPagInfo',prodPage,data.total,8,`(p)=>{prodPage=p;loadProds();}`);
+}
+
+document.getElementById('searchProd').addEventListener('input',()=>{prodPage=1;loadProds();});
+
+// Cargar usuarios para dropdown vendedor
+async function loadVendedores(){
+  const data=await apiFetch('/usuarios?estado=Activo&limit=50');
+  if(!data||!data.ok) return;
+  const user=JSON.parse(localStorage.getItem('user')||'{}');
+  const sel=document.getElementById('saleVendedor');
+  sel.innerHTML='<option value="">Auto</option>'+data.data.map(u=>`<option value="${u.id}" ${u.id==user.id?'selected':''}>${u.nombre}</option>`).join('');
+}
+
+// Carrito
+function addToCart(id,nombre,cat,precio,stock){
+  const existing=cart.find(x=>x.id===id);
+  if(existing){
+    if(existing.qty<stock){existing.qty++;renderCart();showToast(`+1 ${nombre}`,'success');}
+    else showToast('Stock máximo alcanzado','error');
+  } else {
+    cart.push({id,nombre,cat,precio,stock,qty:1});
+    renderCart();showToast(`${nombre} agregado`,'success');
+  }
+}
+function changeQty(id,delta){
+  const item=cart.find(x=>x.id===id);
+  if(!item)return;
+  item.qty+=delta;
+  if(item.qty<=0)cart=cart.filter(x=>x.id!==id);
+  else if(item.qty>item.stock){item.qty=item.stock;showToast('Stock máximo','error');}
+  renderCart();
+}
+function removeFromCart(id){cart=cart.filter(x=>x.id!==id);renderCart();}
+function clearCart(){cart=[];renderCart();}
+
+function renderCart(){
+  const cc=document.getElementById('cartContent');
+  const ss=document.getElementById('summarySection');
+  if(!cart.length){cc.innerHTML='<div class="empty-cart"><div>🛒</div>Agrega productos desde la lista</div>';ss.style.display='none';return;}
+  cc.innerHTML=`<table class="cart-table">
+    <thead><tr><th>Producto</th><th>Precio</th><th>Cant.</th><th>Subtotal</th><th></th></tr></thead>
+    <tbody>${cart.map(item=>`<tr>
+      <td><div class="prod-cell"><div class="prod-thumb" style="width:28px;height:28px;font-size:.9rem;">${EMOJIS[item.cat]||'📦'}</div><span style="font-weight:700;font-size:.82rem;">${item.nombre}</span></div></td>
+      <td style="font-weight:700;">$${Number(item.precio).toFixed(2)}</td>
+      <td><div class="qty-ctrl"><button class="qty-btn" onclick="changeQty(${item.id},-1)">−</button><span class="qty-val">${item.qty}</span><button class="qty-btn" onclick="changeQty(${item.id},1)">+</button></div></td>
+      <td style="font-weight:800;">$${(item.precio*item.qty).toFixed(2)}</td>
+      <td><button class="btn-rm" onclick="removeFromCart(${item.id})"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg></button></td>
+    </tr>`).join('')}</tbody>
+  </table>`;
+  ss.style.display='';
+  const sub=cart.reduce((s,i)=>s+i.precio*i.qty,0);
+  const tax=sub*0.16;
+  document.getElementById('sumSubtotal').textContent=`$${sub.toFixed(2)}`;
+  document.getElementById('sumTax').textContent=`$${tax.toFixed(2)}`;
+  document.getElementById('sumTotal').textContent=`$${(sub+tax).toFixed(2)}`;
+}
+
+// Finalizar venta → POST al API
+document.getElementById('btnFinalizar').addEventListener('click', async ()=>{
+  if(!cart.length){showToast('Agrega al menos un producto','error');return;}
+  const btn=document.getElementById('btnFinalizar');
+  btn.classList.add('loading');
+  const body={
+    cliente:document.getElementById('saleCliente').value.trim()||null,
+    metodo_pago:document.getElementById('salePago').value,
+    vendedor_id:document.getElementById('saleVendedor').value||null,
+    items:cart.map(i=>({producto_id:i.id,cantidad:i.qty}))
+  };
+  const data=await apiFetch('/ventas',{method:'POST',body:JSON.stringify(body)});
+  btn.classList.remove('loading');
+  if(!data)return;
+  if(!data.ok){showToast(data.message||'Error al procesar la venta','error');return;}
+  document.getElementById('ventaFolioMsg').textContent=`Folio: ${data.folio} — Total: $${Number(data.total).toFixed(2)}`;
+  cart=[];renderCart();
+  openModal('modalOK');
+  loadProds(); // refrescar stock
+});
+
+document.addEventListener('keydown',e=>{if(e.key==='Escape')closeModal('modalOK');});
+loadProds();
+loadVendedores();
+</script>
+</body>
+</html>

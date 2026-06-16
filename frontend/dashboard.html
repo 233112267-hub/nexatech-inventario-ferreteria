@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ferretería — Dashboard</title>
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="shared.css">
+<style>
+  .stats-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:1rem; margin-bottom:1.4rem; }
+  .stat-card { background:white; border:1px solid var(--border); border-radius:12px; padding:1.2rem 1.4rem; display:flex; align-items:center; gap:1rem; }
+  .stat-icon { width:46px; height:46px; border-radius:10px; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+  .stat-icon svg { width:22px; height:22px; }
+  .si-blue{background:#dbeafe;color:#2563a8;} .si-green{background:#dcfce7;color:#16a34a;}
+  .si-amber{background:#fef3c7;color:#d97706;} .si-purple{background:#ede9fe;color:#7c3aed;}
+  .stat-info small { display:block; font-size:.73rem; color:var(--muted); font-weight:700; margin-bottom:.15rem; }
+  .stat-info strong { font-size:1.8rem; font-weight:800; line-height:1; }
+  .stat-info p { font-size:.72rem; color:var(--muted); margin-top:.15rem; }
+  .num-blue{color:#2563a8;} .num-green{color:#16a34a;} .num-amber{color:#d97706;} .num-purple{color:#7c3aed;}
+  .row2 { display:grid; grid-template-columns:1.6fr 1fr; gap:1rem; margin-bottom:1rem; }
+  .card { background:white; border:1px solid var(--border); border-radius:12px; overflow:hidden; }
+  .card-header { display:flex; align-items:center; justify-content:space-between; padding:.95rem 1.2rem; border-bottom:1px solid var(--border); }
+  .card-header h3 { font-size:.92rem; font-weight:800; }
+  .mini-table { width:100%; border-collapse:collapse; font-size:.83rem; }
+  .mini-table th { padding:.55rem 1rem; text-align:left; font-size:.68rem; font-weight:700; text-transform:uppercase; letter-spacing:.4px; color:var(--muted); background:#f8fafc; border-bottom:1px solid var(--border); }
+  .mini-table td { padding:.65rem 1rem; border-bottom:1px solid var(--border); vertical-align:middle; }
+  .mini-table tr:last-child td { border-bottom:none; }
+  .mini-table tr:hover td { background:#f8fafc; }
+  .alert-item { display:flex; align-items:center; gap:.8rem; padding:.75rem 1.2rem; border-bottom:1px solid var(--border); }
+  .alert-item:last-child { border-bottom:none; }
+  .alert-dot { width:9px; height:9px; border-radius:50%; flex-shrink:0; }
+  .alert-body small { display:block; font-size:.72rem; color:var(--muted); margin-top:1px; }
+  .alert-tag { margin-left:auto; font-size:.7rem; font-weight:700; padding:2px 9px; border-radius:20px; }
+  .alert-tag.red{background:var(--red-bg);color:var(--red);} .alert-tag.amber{background:var(--amber-bg);color:var(--amber);}
+  .chart-wrap { padding:1rem 1.2rem 1.4rem; }
+  .bar-row { display:flex; align-items:center; gap:.7rem; margin-bottom:.65rem; }
+  .bar-label { width:90px; font-size:.76rem; font-weight:700; color:var(--muted); text-align:right; flex-shrink:0; }
+  .bar-track { flex:1; background:#f1f5f9; border-radius:20px; height:10px; overflow:hidden; }
+  .bar-fill { height:100%; border-radius:20px; transition:width .6s ease; }
+  .bar-val { width:42px; font-size:.76rem; font-weight:800; color:var(--text); }
+  .quick-grid { display:grid; grid-template-columns:1fr 1fr; gap:.7rem; padding:1rem 1.2rem; }
+  .quick-btn { display:flex; align-items:center; gap:.6rem; background:var(--bg); border:1.5px solid var(--border); border-radius:9px; padding:.65rem .85rem; font-family:'Nunito',sans-serif; font-size:.82rem; font-weight:700; color:var(--text); cursor:pointer; transition:border-color .15s,background .15s; text-decoration:none; }
+  .quick-btn:hover { border-color:var(--blue); background:#eff6ff; color:var(--blue); }
+  .quick-btn svg { width:16px; height:16px; }
+  .row3 { display:grid; grid-template-columns:1fr 1fr; gap:1rem; }
+  @media(max-width:1100px){ .stats-grid{grid-template-columns:repeat(2,1fr);} .row2,.row3{grid-template-columns:1fr;} }
+</style>
+</head>
+<body>
+<aside class="sidebar">
+  <div class="sidebar-brand">
+    <div class="brand-logo">⚙️</div>
+    <div class="brand-text"><strong>FERRETERÍA</strong><small>INVENTARIO Y VENTAS</small></div>
+  </div>
+  <nav>
+    <a class="nav-item active" href="dashboard.html"><span class="icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg></span>Dashboard</a>
+    <a class="nav-item" href="usuarios.html"><span class="icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg></span>Usuarios</a>
+    <a class="nav-item" href="productos.html"><span class="icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg></span>Productos</a>
+    <a class="nav-item" href="inventario.html"><span class="icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg></span>Inventario</a>
+    <a class="nav-item" href="movimientos.html"><span class="icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg></span>Movimientos</a>
+    <a class="nav-item" href="ventas.html"><span class="icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg></span>Ventas</a>
+    <a class="nav-item" href="reportes.html"><span class="icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></span>Reportes</a>
+    <a class="nav-item" href="alertas.html"><span class="icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg></span>Alertas<span class="badge" id="alertBadge">0</span></a>
+  </nav>
+  <div class="sidebar-user">
+    <div class="avatar">AD</div>
+    <div class="user-info"><strong class="user-name-display">Admin</strong><small class="user-role-display">Administrador</small></div>
+  </div>
+</aside>
+
+<div class="main">
+  <header class="topbar">
+    <button class="menu-btn" onclick="document.querySelector('.sidebar').classList.toggle('open')">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+    </button>
+    <div class="topbar-right">
+      <button class="icon-btn"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg><span class="dot" id="alertDot">0</span></button>
+      <a href="login.html" class="btn-logout"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>Cerrar sesión</a>
+    </div>
+  </header>
+  <div class="page-head"><div><h1>Dashboard</h1><p>Resumen general del sistema</p></div></div>
+  <div class="content">
+    <div class="stats-grid">
+      <div class="stat-card"><div class="stat-icon si-blue"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg></div><div class="stat-info"><small>Total productos</small><strong class="num-blue" id="kTotalProd">—</strong><p>Productos registrados</p></div></div>
+      <div class="stat-card"><div class="stat-icon si-green"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg></div><div class="stat-info"><small>Ventas del mes</small><strong class="num-green" id="kVentas">—</strong><p id="kVentasSub">cargando...</p></div></div>
+      <div class="stat-card"><div class="stat-icon si-amber"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></div><div class="stat-info"><small>Alertas activas</small><strong class="num-amber" id="kAlertas">—</strong><p id="kAlertasSub">cargando...</p></div></div>
+      <div class="stat-card"><div class="stat-icon si-purple"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg></div><div class="stat-info"><small>Usuarios activos</small><strong class="num-purple" id="kUsuarios">—</strong><p id="kUsuariosSub">cargando...</p></div></div>
+    </div>
+    <div class="row2">
+      <div class="card">
+        <div class="card-header"><h3>Ventas recientes</h3><a href="ventas.html" style="font-size:.78rem;color:var(--blue);font-weight:700;text-decoration:none;">Ver todas →</a></div>
+        <table class="mini-table"><thead><tr><th>Folio</th><th>Cliente</th><th>Total</th><th>Estado</th></tr></thead><tbody id="salesTable"><tr><td colspan="4" style="text-align:center;padding:1.5rem;color:var(--muted);">Cargando...</td></tr></tbody></table>
+      </div>
+      <div class="card">
+        <div class="card-header"><h3>Alertas de inventario</h3><a href="alertas.html" style="font-size:.78rem;color:var(--blue);font-weight:700;text-decoration:none;">Ver alertas →</a></div>
+        <div id="alertsList"><div style="text-align:center;padding:1.5rem;color:var(--muted);">Cargando...</div></div>
+      </div>
+    </div>
+    <div class="row3">
+      <div class="card">
+        <div class="card-header"><h3>Stock bajo / Agotados</h3></div>
+        <div class="chart-wrap" id="barChart"><div style="text-align:center;padding:1rem;color:var(--muted);">Cargando...</div></div>
+      </div>
+      <div class="card">
+        <div class="card-header"><h3>Acciones rápidas</h3></div>
+        <div class="quick-grid">
+          <a href="productos.html" class="quick-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Nuevo producto</a>
+          <a href="usuarios.html" class="quick-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></svg>Nuevo usuario</a>
+          <a href="inventario.html" class="quick-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>Ver inventario</a>
+          <a href="ventas.html" class="quick-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>Nueva venta</a>
+          <a href="reportes.html" class="quick-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>Generar reporte</a>
+          <a href="alertas.html" class="quick-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>Ver alertas</a>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+<script src="shared.js"></script>
+<script>
+checkAuth();
+setupLogout();
+renderUserInfo();
+
+async function loadDashboard() {
+  const data = await apiFetch('/dashboard/stats');
+  if (!data || !data.ok) return;
+  const s = data.data;
+  document.getElementById('kTotalProd').textContent = s.totalProductos ?? 0;
+  document.getElementById('kVentas').textContent = `$${Number(s.ventasMes||0).toLocaleString('es-MX',{minimumFractionDigits:2})}`;
+  document.getElementById('kVentasSub').textContent = `${s.totalVentasMes ?? 0} ventas este mes`;
+  document.getElementById('kAlertas').textContent = s.alertasPendientes ?? 0;
+  document.getElementById('kAlertasSub').textContent = `${s.stockBajo??0} bajo stock · ${s.agotados??0} agotados`;
+  document.getElementById('kUsuarios').textContent = s.totalUsuarios ?? 0;
+  document.getElementById('kUsuariosSub').textContent = 'usuarios activos';
+  const ap = s.alertasPendientes ?? 0;
+  document.getElementById('alertBadge').textContent = ap;
+  document.getElementById('alertDot').textContent = ap;
+  loadStockBajo(s);
+}
+
+async function loadVentas() {
+  const data = await apiFetch('/ventas?limit=5');
+  if (!data || !data.ok) return;
+  const rows = data.data;
+  if (!rows.length) { document.getElementById('salesTable').innerHTML = '<tr><td colspan="4" style="text-align:center;padding:1.5rem;color:var(--muted);">Sin ventas recientes</td></tr>'; return; }
+  const colMap = { Pagada:'#dcfce7|#16a34a', Pendiente:'#fef3c7|#d97706', Cancelada:'#fee2e2|#dc2626' };
+  document.getElementById('salesTable').innerHTML = rows.map(v => {
+    const [bg,c] = (colMap[v.estado]||'#f1f5f9|#64748b').split('|');
+    return `<tr>
+      <td style="font-family:monospace;font-size:.78rem;color:var(--muted);font-weight:700;">${v.folio}</td>
+      <td style="font-weight:700;">${v.cliente||'—'}</td>
+      <td style="font-weight:800;">$${Number(v.total).toLocaleString('es-MX',{minimumFractionDigits:2})}</td>
+      <td><span style="background:${bg};color:${c};padding:2px 9px;border-radius:20px;font-size:.7rem;font-weight:700;">${v.estado}</span></td>
+    </tr>`;
+  }).join('');
+}
+
+async function loadAlertas() {
+  const data = await apiFetch('/alertas?estado=Pendiente&limit=5');
+  if (!data || !data.ok) return;
+  const rows = data.data;
+  if (!rows.length) { document.getElementById('alertsList').innerHTML = '<div style="text-align:center;padding:1.5rem;color:var(--muted);">Sin alertas pendientes ✅</div>'; return; }
+  document.getElementById('alertsList').innerHTML = rows.map(a => {
+    const isRed = a.tipo === 'Crítica';
+    return `<div class="alert-item">
+      <div class="alert-dot" style="background:${isRed?'var(--red)':'var(--amber)'}"></div>
+      <div class="alert-body"><strong style="font-size:.84rem;">${a.nombre}</strong><small>${a.producto_nombre||a.descripcion}</small></div>
+      <span class="alert-tag ${isRed?'red':'amber'}">${a.tipo}</span>
+    </div>`;
+  }).join('');
+}
+
+async function loadStockBajo(stats) {
+  const data = await apiFetch('/productos/stock-bajo');
+  if (!data || !data.ok) return;
+  const rows = data.data.slice(0,6);
+  if (!rows.length) { document.getElementById('barChart').innerHTML = '<div style="text-align:center;padding:1rem;color:var(--muted);">Todo el stock está en niveles correctos ✅</div>'; return; }
+  const max = Math.max(...rows.map(r => r.stock_minimo), 1);
+  document.getElementById('barChart').innerHTML = rows.map(r => {
+    const pct = Math.max(5, (r.stock / r.stock_minimo) * 100).toFixed(0);
+    const color = r.stock === 0 ? '#dc2626' : '#d97706';
+    return `<div class="bar-row">
+      <div class="bar-label" title="${r.nombre}">${r.nombre.substring(0,12)}…</div>
+      <div class="bar-track"><div class="bar-fill" style="width:${Math.min(pct,100)}%;background:${color};"></div></div>
+      <div class="bar-val" style="color:${color};">${r.stock}/${r.stock_minimo}</div>
+    </div>`;
+  }).join('');
+}
+
+loadDashboard();
+loadVentas();
+loadAlertas();
+</script>
+</body>
+</html>
