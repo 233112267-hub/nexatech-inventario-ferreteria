@@ -1,4 +1,4 @@
-const db = require('../config/database');
+const { query, pool } = require('../config/database');
 
 // ══════════════════════════════════════════════
 //  MOVIMIENTOS
@@ -6,65 +6,93 @@ const db = require('../config/database');
 
 const movimientos = {
   /** GET /api/movimientos */
-  getAll(req, res) {
-    const { search, tipo, page = 1, limit = 10 } = req.query;
-    const offset = (page - 1) * limit;
-    let where = []; let params = [];
+  async getAll(req, res) {
+    try {
+      const { search, tipo, page = 1, limit = 10 } = req.query;
+      const offset = (page - 1) * limit;
+      let where = []; let params = [];
 
-    if (search) {
-      where.push(`(p.nombre LIKE ? OR p.codigo LIKE ? OR m.referencia LIKE ?)`);
-      const q = `%${search}%`; params.push(q, q, q);
-    }
-    if (tipo) { where.push(`m.tipo = ?`); params.push(tipo); }
-
-    const whereSQL = where.length ? `WHERE ${where.join(' AND ')}` : '';
-
-    db.get(`SELECT COUNT(*) as total FROM movimientos m
-            LEFT JOIN productos p ON m.producto_id = p.id ${whereSQL}`, params,
-      (err, count) => {
-        if (err) return res.status(500).json({ ok: false, message: err.message });
-        db.all(
-          `SELECT m.*, p.nombre as producto_nombre, p.codigo as producto_codigo,
-                  u.nombre as usuario_nombre
-           FROM movimientos m
-           LEFT JOIN productos p ON m.producto_id = p.id
-           LEFT JOIN usuarios  u ON m.usuario_id = u.id
-           ${whereSQL} ORDER BY m.id DESC LIMIT ? OFFSET ?`,
-          [...params, +limit, +offset],
-          (err2, rows) => {
-            if (err2) return res.status(500).json({ ok: false, message: err2.message });
-            res.json({ ok: true, total: count.total, page: +page, limit: +limit, data: rows });
-          }
-        );
+      if (search) {
+        params.push(`%${search}%`);
+        where.push(`(p.nombre ILIKE $${params.length} OR p.codigo ILIKE $${params.length} OR m.referencia ILIKE $${params.length})`);
       }
-    );
+      if (tipo) { params.push(tipo); where.push(`m.tipo_movimiento = $${params.length}`); }
+
+      const whereSQL = where.length ? `WHERE ${where.join(' AND ')}` : '';
+
+      const { rows: countRows } = await query(
+        `SELECT COUNT(*)::int AS total FROM MOVIMIENTOS_INVENTARIO m
+         LEFT JOIN PRODUCTOS p ON m.id_producto = p.id_producto ${whereSQL}`,
+        params
+      );
+
+      params.push(+limit, +offset);
+      const { rows } = await query(
+        `SELECT m.id_movimiento AS id, m.tipo_movimiento AS tipo, m.id_producto AS producto_id,
+                p.nombre AS producto_nombre, p.codigo AS producto_codigo,
+                m.cantidad, m.stock_anterior, m.stock_nuevo AS stock_actual, m.referencia,
+                m.id_usuario AS usuario_id, u.nombre AS usuario_nombre, m.fecha_movimiento AS created_at
+         FROM MOVIMIENTOS_INVENTARIO m
+         LEFT JOIN PRODUCTOS p ON m.id_producto = p.id_producto
+         LEFT JOIN USUARIOS  u ON m.id_usuario  = u.id_usuario
+         ${whereSQL} ORDER BY m.id_movimiento DESC LIMIT $${params.length - 1} OFFSET $${params.length}`,
+        params
+      );
+
+      res.json({ ok: true, total: countRows[0].total, page: +page, limit: +limit, data: rows });
+    } catch (err) {
+      res.status(500).json({ ok: false, message: err.message });
+    }
   },
 
-  /** POST /api/movimientos  — manual entry/exit/adjustment */
-  create(req, res) {
+  /** POST /api/movimientos — entrada/salida/ajuste manual */
+  async create(req, res) {
     const { tipo, producto_id, cantidad, referencia } = req.body;
     if (!tipo || !producto_id || !cantidad) {
       return res.status(400).json({ ok: false, message: 'tipo, producto_id y cantidad son requeridos' });
     }
+    const tipoDB = tipo.toUpperCase();
 
-    db.get(`SELECT stock FROM productos WHERE id = ?`, [producto_id], (err, prod) => {
-      if (err || !prod) return res.status(404).json({ ok: false, message: 'Producto no encontrado' });
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
 
-      const delta = tipo === 'Entrada' ? +Math.abs(cantidad) : -Math.abs(cantidad);
-      const newStock = prod.stock + delta;
-      if (newStock < 0) return res.status(400).json({ ok: false, message: 'Stock insuficiente' });
-
-      db.run(`UPDATE productos SET stock=?,updated_at=CURRENT_TIMESTAMP WHERE id=?`, [newStock, producto_id]);
-      db.run(
-        `INSERT INTO movimientos(tipo,producto_id,cantidad,stock_anterior,stock_actual,referencia,usuario_id)
-         VALUES(?,?,?,?,?,?,?)`,
-        [tipo, producto_id, delta, prod.stock, newStock, referencia||null, req.user.id],
-        function (e) {
-          if (e) return res.status(500).json({ ok: false, message: e.message });
-          res.status(201).json({ ok: true, message: 'Movimiento registrado', id: this.lastID });
-        }
+      const { rows } = await client.query(
+        'SELECT stock_actual FROM PRODUCTOS WHERE id_producto = $1 FOR UPDATE',
+        [producto_id]
       );
-    });
+      const prod = rows[0];
+      if (!prod) {
+        await client.query('ROLLBACK');
+        return res.status(404).json({ ok: false, message: 'Producto no encontrado' });
+      }
+
+      const delta = tipoDB === 'ENTRADA' ? Math.abs(cantidad) : -Math.abs(cantidad);
+      const newStock = prod.stock_actual + delta;
+      if (newStock < 0) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ ok: false, message: 'Stock insuficiente' });
+      }
+
+      await client.query(
+        'UPDATE PRODUCTOS SET stock_actual = $1, updated_at = CURRENT_TIMESTAMP WHERE id_producto = $2',
+        [newStock, producto_id]
+      );
+
+      const { rows: movRows } = await client.query(
+        `INSERT INTO MOVIMIENTOS_INVENTARIO (id_producto, id_usuario, tipo_movimiento, cantidad, stock_anterior, stock_nuevo, referencia)
+         VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id_movimiento`,
+        [producto_id, req.user.id, tipoDB, delta, prod.stock_actual, newStock, referencia || null]
+      );
+
+      await client.query('COMMIT');
+      res.status(201).json({ ok: true, message: 'Movimiento registrado', id: movRows[0].id_movimiento });
+    } catch (err) {
+      await client.query('ROLLBACK');
+      res.status(500).json({ ok: false, message: err.message });
+    } finally {
+      client.release();
+    }
   },
 };
 
@@ -74,40 +102,46 @@ const movimientos = {
 
 const alertas = {
   /** GET /api/alertas */
-  getAll(req, res) {
-    const { tipo, estado, page = 1, limit = 10 } = req.query;
-    const offset = (page - 1) * limit;
-    let where = []; let params = [];
+  async getAll(req, res) {
+    try {
+      const { tipo, estado, page = 1, limit = 10 } = req.query;
+      const offset = (page - 1) * limit;
+      let where = []; let params = [];
 
-    if (tipo)   { where.push(`a.tipo = ?`);   params.push(tipo); }
-    if (estado) { where.push(`a.estado = ?`); params.push(estado); }
+      if (tipo)   { params.push(tipo);   where.push(`a.tipo = $${params.length}`); }
+      if (estado) { params.push(estado); where.push(`a.estado = $${params.length}`); }
 
-    const whereSQL = where.length ? `WHERE ${where.join(' AND ')}` : '';
+      const whereSQL = where.length ? `WHERE ${where.join(' AND ')}` : '';
 
-    db.get(`SELECT COUNT(*) as total FROM alertas a ${whereSQL}`, params, (err, count) => {
-      if (err) return res.status(500).json({ ok: false, message: err.message });
-      db.all(
-        `SELECT a.*, p.nombre as producto_nombre, p.codigo as producto_codigo
-         FROM alertas a LEFT JOIN productos p ON a.producto_id = p.id
-         ${whereSQL} ORDER BY a.id DESC LIMIT ? OFFSET ?`,
-        [...params, +limit, +offset],
-        (err2, rows) => {
-          if (err2) return res.status(500).json({ ok: false, message: err2.message });
-          res.json({ ok: true, total: count.total, page: +page, limit: +limit, data: rows });
-        }
+      const { rows: countRows } = await query(`SELECT COUNT(*)::int AS total FROM ALERTAS a ${whereSQL}`, params);
+
+      params.push(+limit, +offset);
+      const { rows } = await query(
+        `SELECT a.id_alerta AS id, a.tipo, a.nombre, a.descripcion, a.id_producto AS producto_id,
+                p.nombre AS producto_nombre, p.codigo AS producto_codigo, a.estado, a.fecha_creacion AS created_at
+         FROM ALERTAS a LEFT JOIN PRODUCTOS p ON a.id_producto = p.id_producto
+         ${whereSQL} ORDER BY a.id_alerta DESC LIMIT $${params.length - 1} OFFSET $${params.length}`,
+        params
       );
-    });
+
+      res.json({ ok: true, total: countRows[0].total, page: +page, limit: +limit, data: rows });
+    } catch (err) {
+      res.status(500).json({ ok: false, message: err.message });
+    }
   },
 
   /** PATCH /api/alertas/:id/resolver */
-  resolver(req, res) {
-    db.run(`UPDATE alertas SET estado='Resuelta' WHERE id=? AND estado='Pendiente'`,
-      [req.params.id], function (err) {
-        if (err) return res.status(500).json({ ok: false, message: err.message });
-        if (this.changes === 0) return res.status(404).json({ ok: false, message: 'Alerta no encontrada o ya resuelta' });
-        res.json({ ok: true, message: 'Alerta marcada como resuelta' });
-      }
-    );
+  async resolver(req, res) {
+    try {
+      const { rowCount } = await query(
+        `UPDATE ALERTAS SET estado = 'Resuelta' WHERE id_alerta = $1 AND estado = 'Pendiente'`,
+        [req.params.id]
+      );
+      if (rowCount === 0) return res.status(404).json({ ok: false, message: 'Alerta no encontrada o ya resuelta' });
+      res.json({ ok: true, message: 'Alerta marcada como resuelta' });
+    } catch (err) {
+      res.status(500).json({ ok: false, message: err.message });
+    }
   },
 };
 
@@ -116,33 +150,37 @@ const alertas = {
 // ══════════════════════════════════════════════
 
 const categorias = {
-  getAll(req, res) {
-    db.all(`SELECT c.*, COUNT(p.id) as total_productos
-            FROM categorias c LEFT JOIN productos p ON p.categoria_id = c.id
-            GROUP BY c.id ORDER BY c.nombre`, [],
-      (err, rows) => {
-        if (err) return res.status(500).json({ ok: false, message: err.message });
-        res.json({ ok: true, data: rows });
-      }
-    );
+  async getAll(req, res) {
+    try {
+      const { rows } = await query(
+        `SELECT c.id_categoria AS id, c.nombre, COUNT(p.id_producto)::int AS total_productos
+         FROM CATEGORIAS c LEFT JOIN PRODUCTOS p ON p.id_categoria = c.id_categoria
+         GROUP BY c.id_categoria ORDER BY c.nombre`
+      );
+      res.json({ ok: true, data: rows });
+    } catch (err) {
+      res.status(500).json({ ok: false, message: err.message });
+    }
   },
-  create(req, res) {
+  async create(req, res) {
     const { nombre } = req.body;
     if (!nombre) return res.status(400).json({ ok: false, message: 'nombre es requerido' });
-    db.run(`INSERT INTO categorias(nombre) VALUES(?)`, [nombre], function (err) {
-      if (err) {
-        if (err.message.includes('UNIQUE')) return res.status(409).json({ ok: false, message: 'Categoría ya existe' });
-        return res.status(500).json({ ok: false, message: err.message });
-      }
-      res.status(201).json({ ok: true, message: 'Categoría creada', id: this.lastID });
-    });
+    try {
+      const { rows } = await query('INSERT INTO CATEGORIAS (nombre) VALUES ($1) RETURNING id_categoria', [nombre]);
+      res.status(201).json({ ok: true, message: 'Categoría creada', id: rows[0].id_categoria });
+    } catch (err) {
+      if (err.code === '23505') return res.status(409).json({ ok: false, message: 'Categoría ya existe' });
+      res.status(500).json({ ok: false, message: err.message });
+    }
   },
-  remove(req, res) {
-    db.run(`DELETE FROM categorias WHERE id=?`, [req.params.id], function (err) {
-      if (err) return res.status(500).json({ ok: false, message: err.message });
-      if (this.changes === 0) return res.status(404).json({ ok: false, message: 'Categoría no encontrada' });
+  async remove(req, res) {
+    try {
+      const { rowCount } = await query('DELETE FROM CATEGORIAS WHERE id_categoria = $1', [req.params.id]);
+      if (rowCount === 0) return res.status(404).json({ ok: false, message: 'Categoría no encontrada' });
       res.json({ ok: true, message: 'Categoría eliminada' });
-    });
+    } catch (err) {
+      res.status(500).json({ ok: false, message: err.message });
+    }
   },
 };
 
@@ -151,30 +189,28 @@ const categorias = {
 // ══════════════════════════════════════════════
 
 const dashboard = {
-  stats(req, res) {
-    const queries = {
-      totalProductos:      `SELECT COUNT(*) as v FROM productos WHERE estado='Activo'`,
-      productosDisponibles:`SELECT COUNT(*) as v FROM productos WHERE stock > 0 AND estado='Activo'`,
-      stockBajo:           `SELECT COUNT(*) as v FROM productos WHERE stock <= stock_minimo AND stock > 0 AND estado='Activo'`,
-      agotados:            `SELECT COUNT(*) as v FROM productos WHERE stock = 0 AND estado='Activo'`,
-      totalUsuarios:       `SELECT COUNT(*) as v FROM usuarios WHERE estado='Activo'`,
-      alertasPendientes:   `SELECT COUNT(*) as v FROM alertas WHERE estado='Pendiente'`,
-      ventasMes:           `SELECT COALESCE(SUM(total),0) as v FROM ventas WHERE strftime('%Y-%m',created_at)=strftime('%Y-%m','now') AND estado='Pagada'`,
-      totalVentasMes:      `SELECT COUNT(*) as v FROM ventas WHERE strftime('%Y-%m',created_at)=strftime('%Y-%m','now')`,
-    };
+  async stats(req, res) {
+    try {
+      const queries = {
+        totalProductos:       `SELECT COUNT(*)::int AS v FROM PRODUCTOS WHERE estado='Activo'`,
+        productosDisponibles: `SELECT COUNT(*)::int AS v FROM PRODUCTOS WHERE stock_actual > 0 AND estado='Activo'`,
+        stockBajo:            `SELECT COUNT(*)::int AS v FROM PRODUCTOS WHERE stock_actual <= stock_minimo AND stock_actual > 0 AND estado='Activo'`,
+        agotados:             `SELECT COUNT(*)::int AS v FROM PRODUCTOS WHERE stock_actual = 0 AND estado='Activo'`,
+        totalUsuarios:        `SELECT COUNT(*)::int AS v FROM USUARIOS WHERE activo = TRUE`,
+        alertasPendientes:    `SELECT COUNT(*)::int AS v FROM ALERTAS WHERE estado='Pendiente'`,
+        ventasMes:            `SELECT COALESCE(SUM(total),0)::float AS v FROM VENTAS WHERE date_trunc('month', fecha_venta) = date_trunc('month', CURRENT_DATE) AND estado='Pagada'`,
+        totalVentasMes:       `SELECT COUNT(*)::int AS v FROM VENTAS WHERE date_trunc('month', fecha_venta) = date_trunc('month', CURRENT_DATE)`,
+      };
 
-    const results = {};
-    const keys = Object.keys(queries);
-    let done = 0;
+      const keys = Object.keys(queries);
+      const results = {};
+      const values = await Promise.all(keys.map(k => query(queries[k])));
+      keys.forEach((k, i) => { results[k] = values[i].rows[0].v; });
 
-    keys.forEach(key => {
-      db.get(queries[key], [], (err, row) => {
-        results[key] = err ? 0 : row.v;
-        if (++done === keys.length) {
-          res.json({ ok: true, data: results });
-        }
-      });
-    });
+      res.json({ ok: true, data: results });
+    } catch (err) {
+      res.status(500).json({ ok: false, message: err.message });
+    }
   },
 };
 

@@ -1,168 +1,208 @@
-const db = require('../config/database');
+const { query, pool } = require('../config/database');
 
 /** GET /api/ventas */
-const getAll = (req, res) => {
-  const { search, estado, page = 1, limit = 10 } = req.query;
-  const offset = (page - 1) * limit;
-  let where = []; let params = [];
+const getAll = async (req, res) => {
+  try {
+    const { search, estado, page = 1, limit = 10 } = req.query;
+    const offset = (page - 1) * limit;
+    let where = []; let params = [];
 
-  if (search) { where.push(`(v.folio LIKE ? OR v.cliente LIKE ?)`); const q=`%${search}%`; params.push(q,q); }
-  if (estado)  { where.push(`v.estado = ?`); params.push(estado); }
+    if (search) {
+      params.push(`%${search}%`);
+      where.push(`(v.folio ILIKE $${params.length} OR v.cliente ILIKE $${params.length})`);
+    }
+    if (estado) { params.push(estado); where.push(`v.estado = $${params.length}`); }
 
-  const whereSQL = where.length ? `WHERE ${where.join(' AND ')}` : '';
+    const whereSQL = where.length ? `WHERE ${where.join(' AND ')}` : '';
 
-  db.get(`SELECT COUNT(*) as total FROM ventas v ${whereSQL}`, params, (err, count) => {
-    if (err) return res.status(500).json({ ok: false, message: err.message });
-    db.all(
-      `SELECT v.*, u.nombre as vendedor_nombre FROM ventas v
-       LEFT JOIN usuarios u ON v.vendedor_id = u.id
-       ${whereSQL} ORDER BY v.id DESC LIMIT ? OFFSET ?`,
-      [...params, +limit, +offset],
-      (err2, rows) => {
-        if (err2) return res.status(500).json({ ok: false, message: err2.message });
-        res.json({ ok: true, total: count.total, page: +page, limit: +limit, data: rows });
-      }
+    const { rows: countRows } = await query(`SELECT COUNT(*)::int AS total FROM VENTAS v ${whereSQL}`, params);
+
+    params.push(+limit, +offset);
+    const { rows } = await query(
+      `SELECT v.id_venta AS id, v.folio, v.cliente, v.id_usuario AS vendedor_id, u.nombre AS vendedor_nombre,
+              v.subtotal, v.descuento, v.impuestos, v.total, v.metodo_pago, v.estado, v.fecha_venta AS created_at
+       FROM VENTAS v LEFT JOIN USUARIOS u ON v.id_usuario = u.id_usuario
+       ${whereSQL} ORDER BY v.id_venta DESC LIMIT $${params.length - 1} OFFSET $${params.length}`,
+      params
     );
-  });
+
+    res.json({ ok: true, total: countRows[0].total, page: +page, limit: +limit, data: rows });
+  } catch (err) {
+    res.status(500).json({ ok: false, message: err.message });
+  }
 };
 
 /** GET /api/ventas/:id */
-const getOne = (req, res) => {
-  db.get(
-    `SELECT v.*, u.nombre as vendedor_nombre FROM ventas v LEFT JOIN usuarios u ON v.vendedor_id=u.id WHERE v.id=?`,
-    [req.params.id],
-    (err, venta) => {
-      if (err) return res.status(500).json({ ok: false, message: err.message });
-      if (!venta) return res.status(404).json({ ok: false, message: 'Venta no encontrada' });
+const getOne = async (req, res) => {
+  try {
+    const { rows: ventaRows } = await query(
+      `SELECT v.id_venta AS id, v.folio, v.cliente, v.id_usuario AS vendedor_id, u.nombre AS vendedor_nombre,
+              v.subtotal, v.descuento, v.impuestos, v.total, v.metodo_pago, v.estado, v.fecha_venta AS created_at
+       FROM VENTAS v LEFT JOIN USUARIOS u ON v.id_usuario = u.id_usuario WHERE v.id_venta = $1`,
+      [req.params.id]
+    );
+    const venta = ventaRows[0];
+    if (!venta) return res.status(404).json({ ok: false, message: 'Venta no encontrada' });
 
-      db.all(
-        `SELECT vd.*, p.nombre as producto_nombre, p.codigo FROM venta_detalle vd
-         JOIN productos p ON vd.producto_id = p.id WHERE vd.venta_id = ?`,
-        [venta.id],
-        (err2, detalle) => {
-          if (err2) return res.status(500).json({ ok: false, message: err2.message });
-          res.json({ ok: true, data: { ...venta, detalle } });
-        }
-      );
-    }
-  );
+    const { rows: detalle } = await query(
+      `SELECT dv.id_detalle AS id, dv.id_producto AS producto_id, p.nombre AS producto_nombre, p.codigo,
+              dv.cantidad, dv.precio_unitario AS precio_unit, dv.subtotal
+       FROM DETALLE_VENTAS dv JOIN PRODUCTOS p ON dv.id_producto = p.id_producto
+       WHERE dv.id_venta = $1`,
+      [venta.id]
+    );
+
+    res.json({ ok: true, data: { ...venta, detalle } });
+  } catch (err) {
+    res.status(500).json({ ok: false, message: err.message });
+  }
 };
 
 /** POST /api/ventas
  * Body: { cliente, vendedor_id, metodo_pago, descuento, items: [{producto_id, cantidad}] }
  */
-const create = (req, res) => {
+const create = async (req, res) => {
   const { cliente, vendedor_id, metodo_pago = 'Efectivo', descuento = 0, items } = req.body;
 
   if (!items || !Array.isArray(items) || items.length === 0) {
     return res.status(400).json({ ok: false, message: 'Se requiere al menos un producto en items' });
   }
 
-  // Validate stock for all items first
-  let checked = 0;
-  let errors = [];
-  let productData = {};
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
 
-  const checkStock = () => {
-    items.forEach(item => {
-      db.get(`SELECT id, nombre, precio, stock FROM productos WHERE id = ? AND estado = 'Activo'`,
-        [item.producto_id],
-        (err, prod) => {
-          checked++;
-          if (err || !prod) { errors.push(`Producto ID ${item.producto_id} no encontrado`); }
-          else if (prod.stock < item.cantidad) {
-            errors.push(`Stock insuficiente para "${prod.nombre}" (disponible: ${prod.stock})`);
-          } else {
-            productData[item.producto_id] = prod;
-          }
-          if (checked === items.length) finalizeSale();
-        }
+    // 1) Validar stock y traer datos de producto (con bloqueo de fila para evitar carreras)
+    const productData = {};
+    for (const item of items) {
+      const { rows } = await client.query(
+        `SELECT id_producto, nombre, precio_venta, stock_actual, stock_minimo
+         FROM PRODUCTOS WHERE id_producto = $1 AND estado = 'Activo' FOR UPDATE`,
+        [item.producto_id]
       );
-    });
-  };
+      const prod = rows[0];
+      if (!prod) throw new AppError(`Producto ID ${item.producto_id} no encontrado`);
+      if (prod.stock_actual < item.cantidad) {
+        throw new AppError(`Stock insuficiente para "${prod.nombre}" (disponible: ${prod.stock_actual})`);
+      }
+      productData[item.producto_id] = prod;
+    }
 
-  const finalizeSale = () => {
-    if (errors.length) return res.status(400).json({ ok: false, message: errors.join('; ') });
-
-    // Calculate totals
+    // 2) Calcular totales
     let subtotal = 0;
     items.forEach(item => {
-      subtotal += productData[item.producto_id].precio * item.cantidad;
+      subtotal += parseFloat(productData[item.producto_id].precio_venta) * item.cantidad;
     });
     const descuentoAmt = discountAmount(subtotal, descuento);
     const impuestos = (subtotal - descuentoAmt) * 0.16;
     const total = subtotal - descuentoAmt + impuestos;
     const folio = `VTA-${Date.now().toString().slice(-6)}`;
 
-    db.run(
-      `INSERT INTO ventas(folio,cliente,vendedor_id,subtotal,descuento,impuestos,total,metodo_pago) VALUES(?,?,?,?,?,?,?,?)`,
-      [folio, cliente||null, vendedor_id||req.user.id, subtotal, descuentoAmt, impuestos, total, metodo_pago],
-      function (err) {
-        if (err) return res.status(500).json({ ok: false, message: err.message });
-        const ventaId = this.lastID;
-
-        // Insert detail lines + update stock
-        items.forEach(item => {
-          const prod = productData[item.producto_id];
-          const lineSubtotal = prod.precio * item.cantidad;
-          const newStock = prod.stock - item.cantidad;
-
-          db.run(`INSERT INTO venta_detalle(venta_id,producto_id,cantidad,precio_unit,subtotal) VALUES(?,?,?,?,?)`,
-            [ventaId, item.producto_id, item.cantidad, prod.precio, lineSubtotal]);
-
-          db.run(`UPDATE productos SET stock=?,updated_at=CURRENT_TIMESTAMP WHERE id=?`,
-            [newStock, item.producto_id]);
-
-          // Register movement
-          db.run(`INSERT INTO movimientos(tipo,producto_id,cantidad,stock_anterior,stock_actual,referencia,usuario_id)
-                  VALUES('Salida',?,?,?,?,?,?)`,
-            [item.producto_id, -item.cantidad, prod.stock, newStock, folio, req.user.id]);
-
-          // Auto-alert if stock falls below minimum
-          if (newStock <= prod.stock_minimo) {
-            const tipo = newStock === 0 ? 'Crítica' : 'Advertencia';
-            const nombre = newStock === 0 ? 'Sin stock' : 'Stock bajo';
-            db.run(`INSERT INTO alertas(tipo,nombre,descripcion,producto_id) VALUES(?,?,?,?)`,
-              [tipo, nombre, `Stock actual (${newStock}) <= mínimo tras venta ${folio}.`, item.producto_id]);
-          }
-        });
-
-        res.status(201).json({ ok: true, message: 'Venta registrada', id: ventaId, folio, total });
-      }
+    // 3) Insertar venta
+    const { rows: ventaRows } = await client.query(
+      `INSERT INTO VENTAS (id_usuario, folio, cliente, subtotal, descuento, impuestos, total, metodo_pago)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id_venta`,
+      [vendedor_id || req.user.id, folio, cliente || null, subtotal, descuentoAmt, impuestos, total, metodo_pago]
     );
-  };
+    const ventaId = ventaRows[0].id_venta;
 
-  checkStock();
+    // 4) Detalle + actualizar stock + movimientos + alertas
+    for (const item of items) {
+      const prod = productData[item.producto_id];
+      const lineSubtotal = parseFloat(prod.precio_venta) * item.cantidad;
+      const newStock = prod.stock_actual - item.cantidad;
+
+      await client.query(
+        `INSERT INTO DETALLE_VENTAS (id_venta, id_producto, cantidad, precio_unitario, subtotal)
+         VALUES ($1,$2,$3,$4,$5)`,
+        [ventaId, item.producto_id, item.cantidad, prod.precio_venta, lineSubtotal]
+      );
+
+      await client.query(
+        `UPDATE PRODUCTOS SET stock_actual = $1, updated_at = CURRENT_TIMESTAMP WHERE id_producto = $2`,
+        [newStock, item.producto_id]
+      );
+
+      await client.query(
+        `INSERT INTO MOVIMIENTOS_INVENTARIO (id_producto, id_usuario, tipo_movimiento, cantidad, stock_anterior, stock_nuevo, referencia)
+         VALUES ($1,$2,'SALIDA',$3,$4,$5,$6)`,
+        [item.producto_id, req.user.id, item.cantidad, prod.stock_actual, newStock, folio]
+      );
+
+      if (newStock <= prod.stock_minimo) {
+        const tipo = newStock === 0 ? 'Critica' : 'Advertencia';
+        const nombreAlerta = newStock === 0 ? 'Sin stock' : 'Stock bajo';
+        await client.query(
+          `INSERT INTO ALERTAS (tipo, nombre, descripcion, id_producto)
+           VALUES ($1,$2,$3,$4)`,
+          [tipo, nombreAlerta, `Stock actual (${newStock}) <= mínimo tras venta ${folio}.`, item.producto_id]
+        );
+      }
+    }
+
+    await client.query('COMMIT');
+    res.status(201).json({ ok: true, message: 'Venta registrada', id: ventaId, folio, total });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    const status = err instanceof AppError ? 400 : 500;
+    res.status(status).json({ ok: false, message: err.message });
+  } finally {
+    client.release();
+  }
 };
 
 /** PATCH /api/ventas/:id/cancelar */
-const cancelar = (req, res) => {
-  db.get(`SELECT * FROM ventas WHERE id = ?`, [req.params.id], (err, venta) => {
-    if (err) return res.status(500).json({ ok: false, message: err.message });
-    if (!venta) return res.status(404).json({ ok: false, message: 'Venta no encontrada' });
-    if (venta.estado === 'Cancelada') return res.status(400).json({ ok: false, message: 'Venta ya cancelada' });
+const cancelar = async (req, res) => {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
 
-    // Restore stock
-    db.all(`SELECT * FROM venta_detalle WHERE venta_id = ?`, [venta.id], (err2, items) => {
-      if (err2) return res.status(500).json({ ok: false, message: err2.message });
-      items.forEach(item => {
-        db.get(`SELECT stock FROM productos WHERE id = ?`, [item.producto_id], (e, prod) => {
-          if (e || !prod) return;
-          const restored = prod.stock + item.cantidad;
-          db.run(`UPDATE productos SET stock=?,updated_at=CURRENT_TIMESTAMP WHERE id=?`, [restored, item.producto_id]);
-          db.run(`INSERT INTO movimientos(tipo,producto_id,cantidad,stock_anterior,stock_actual,referencia,usuario_id)
-                  VALUES('Entrada',?,?,?,?,?,?)`,
-            [item.producto_id, item.cantidad, prod.stock, restored, `Cancelación ${venta.folio}`, req.user.id]);
-        });
-      });
+    const { rows: ventaRows } = await client.query('SELECT * FROM VENTAS WHERE id_venta = $1 FOR UPDATE', [req.params.id]);
+    const venta = ventaRows[0];
+    if (!venta) throw new AppError('Venta no encontrada', 404);
+    if (venta.estado === 'Cancelada') throw new AppError('Venta ya cancelada');
 
-      db.run(`UPDATE ventas SET estado='Cancelada' WHERE id=?`, [venta.id], (e) => {
-        if (e) return res.status(500).json({ ok: false, message: e.message });
-        res.json({ ok: true, message: 'Venta cancelada y stock restaurado' });
-      });
-    });
-  });
+    const { rows: items } = await client.query('SELECT * FROM DETALLE_VENTAS WHERE id_venta = $1', [venta.id_venta]);
+
+    for (const item of items) {
+      const { rows: prodRows } = await client.query(
+        'SELECT stock_actual FROM PRODUCTOS WHERE id_producto = $1 FOR UPDATE',
+        [item.id_producto]
+      );
+      const prod = prodRows[0];
+      if (!prod) continue;
+
+      const restored = prod.stock_actual + item.cantidad;
+      await client.query(
+        'UPDATE PRODUCTOS SET stock_actual = $1, updated_at = CURRENT_TIMESTAMP WHERE id_producto = $2',
+        [restored, item.id_producto]
+      );
+      await client.query(
+        `INSERT INTO MOVIMIENTOS_INVENTARIO (id_producto, id_usuario, tipo_movimiento, cantidad, stock_anterior, stock_nuevo, referencia)
+         VALUES ($1,$2,'ENTRADA',$3,$4,$5,$6)`,
+        [item.id_producto, req.user.id, item.cantidad, prod.stock_actual, restored, `Cancelación ${venta.folio}`]
+      );
+    }
+
+    await client.query(`UPDATE VENTAS SET estado = 'Cancelada' WHERE id_venta = $1`, [venta.id_venta]);
+
+    await client.query('COMMIT');
+    res.json({ ok: true, message: 'Venta cancelada y stock restaurado' });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    const status = err instanceof AppError ? err.status || 400 : 500;
+    res.status(status).json({ ok: false, message: err.message });
+  } finally {
+    client.release();
+  }
 };
+
+class AppError extends Error {
+  constructor(message, status = 400) {
+    super(message);
+    this.status = status;
+  }
+}
 
 function discountAmount(subtotal, discount) {
   if (!discount) return 0;

@@ -6,8 +6,9 @@ const morgan        = require('morgan');
 const swaggerJsdoc  = require('swagger-jsdoc');
 const swaggerUi     = require('swagger-ui-express');
 
-// Initialize DB (creates tables + seed data)
-require('./config/database');
+// Verificar conexión a PostgreSQL al arrancar
+const { verificarConexion } = require('./config/database');
+verificarConexion();
 
 const routes = require('./routes');
 
