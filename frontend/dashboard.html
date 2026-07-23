@@ -6,6 +6,7 @@
 <title>Ferretería — Dashboard</title>
 <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="shared.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.5.0/chart.umd.min.js"></script>
 <style>
   .stats-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:1rem; margin-bottom:1.4rem; }
   .stat-card { background:white; border:1px solid var(--border); border-radius:12px; padding:1.2rem 1.4rem; display:flex; align-items:center; gap:1rem; }
@@ -43,7 +44,9 @@
   .quick-btn:hover { border-color:var(--blue); background:#eff6ff; color:var(--blue); }
   .quick-btn svg { width:16px; height:16px; }
   .row3 { display:grid; grid-template-columns:1fr 1fr; gap:1rem; }
-  @media(max-width:1100px){ .stats-grid{grid-template-columns:repeat(2,1fr);} .row2,.row3{grid-template-columns:1fr;} }
+  .row4 { display:grid; grid-template-columns:1.6fr 1fr; gap:1rem; margin-bottom:1rem; }
+  .chart-canvas-wrap { padding:1rem 1.2rem; height:260px; position:relative; }
+  @media(max-width:1100px){ .stats-grid{grid-template-columns:repeat(2,1fr);} .row2,.row3,.row4{grid-template-columns:1fr;} }
 </style>
 </head>
 <body>
@@ -85,6 +88,16 @@
       <div class="stat-card"><div class="stat-icon si-green"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg></div><div class="stat-info"><small>Ventas del mes</small><strong class="num-green" id="kVentas">—</strong><p id="kVentasSub">cargando...</p></div></div>
       <div class="stat-card"><div class="stat-icon si-amber"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></div><div class="stat-info"><small>Alertas activas</small><strong class="num-amber" id="kAlertas">—</strong><p id="kAlertasSub">cargando...</p></div></div>
       <div class="stat-card"><div class="stat-icon si-purple"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg></div><div class="stat-info"><small>Usuarios activos</small><strong class="num-purple" id="kUsuarios">—</strong><p id="kUsuariosSub">cargando...</p></div></div>
+    </div>
+    <div class="row4">
+      <div class="card">
+        <div class="card-header"><h3>Ventas de los últimos 7 días</h3></div>
+        <div class="chart-canvas-wrap"><canvas id="salesLineChart"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="card-header"><h3>Productos por categoría</h3></div>
+        <div class="chart-canvas-wrap"><canvas id="categoryDonutChart"></canvas></div>
+      </div>
     </div>
     <div class="row2">
       <div class="card">
@@ -188,9 +201,69 @@ async function loadStockBajo(stats) {
   }).join('');
 }
 
+async function loadSalesChart() {
+  const data = await apiFetch('/dashboard/ventas-semana');
+  if (!data || !data.ok) return;
+  const rows = data.data;
+  const ctx = document.getElementById('salesLineChart');
+  new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: rows.map(r => r.dia.trim()),
+      datasets: [{
+        label: 'Ventas',
+        data: rows.map(r => r.total),
+        borderColor: '#f5a623',
+        backgroundColor: 'rgba(245,166,35,0.12)',
+        fill: true,
+        tension: 0.35,
+        pointBackgroundColor: '#f5a623',
+        pointRadius: 4,
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        y: { beginAtZero: true, ticks: { callback: v => '$' + v } },
+      }
+    }
+  });
+}
+
+async function loadCategoryChart() {
+  const data = await apiFetch('/categorias');
+  if (!data || !data.ok) return;
+  const rows = data.data.filter(c => c.total_productos > 0);
+  const ctx = document.getElementById('categoryDonutChart');
+  if (!rows.length) {
+    ctx.parentElement.innerHTML = '<div style="text-align:center;padding:1.5rem;color:var(--muted);">Sin productos categorizados</div>';
+    return;
+  }
+  const colors = ['#1a2340', '#f5a623', '#2563a8', '#16a34a', '#dc2626', '#7c3aed', '#0891b2'];
+  new Chart(ctx, {
+    type: 'doughnut',
+    data: {
+      labels: rows.map(r => r.nombre),
+      datasets: [{
+        data: rows.map(r => r.total_productos),
+        backgroundColor: rows.map((_, i) => colors[i % colors.length]),
+        borderWidth: 2,
+        borderColor: '#fff',
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { position: 'right', labels: { boxWidth: 12, font: { size: 11 } } } }
+    }
+  });
+}
+
 loadDashboard();
 loadVentas();
 loadAlertas();
+loadSalesChart();
+loadCategoryChart();
 </script>
 </body>
 </html>

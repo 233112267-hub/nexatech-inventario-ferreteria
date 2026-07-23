@@ -1,4 +1,5 @@
 const { query, pool } = require('../config/database');
+const { enviarAlertaStock } = require('../services/emailService');
 
 // ══════════════════════════════════════════════
 //  MOVIMIENTOS
@@ -58,7 +59,7 @@ const movimientos = {
       await client.query('BEGIN');
 
       const { rows } = await client.query(
-        'SELECT stock_actual FROM PRODUCTOS WHERE id_producto = $1 FOR UPDATE',
+        'SELECT nombre, codigo, stock_actual, stock_minimo FROM PRODUCTOS WHERE id_producto = $1 FOR UPDATE',
         [producto_id]
       );
       const prod = rows[0];
@@ -84,6 +85,30 @@ const movimientos = {
          VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id_movimiento`,
         [producto_id, req.user.id, tipoDB, delta, prod.stock_actual, newStock, referencia || null]
       );
+
+      // Si el movimiento deja el stock en o por debajo del mínimo, generar alerta y notificar
+      if (newStock <= prod.stock_minimo) {
+        const tipoAlerta = newStock === 0 ? 'Critica' : 'Advertencia';
+        const nombreAlerta = newStock === 0 ? 'Sin stock' : 'Stock bajo';
+        const descripcionAlerta = newStock === 0
+          ? `Sin unidades disponibles (mínimo: ${prod.stock_minimo}).`
+          : `Quedan ${newStock} unidades (mínimo: ${prod.stock_minimo}).`;
+
+        await client.query(
+          `INSERT INTO ALERTAS (tipo, nombre, descripcion, id_producto) VALUES ($1,$2,$3,$4)`,
+          [tipoAlerta, nombreAlerta, descripcionAlerta, producto_id]
+        );
+
+        if (tipoAlerta === 'Critica') {
+          enviarAlertaStock({
+            tipo: tipoAlerta,
+            nombre: nombreAlerta,
+            descripcion: descripcionAlerta,
+            producto_nombre: prod.nombre,
+            producto_codigo: prod.codigo,
+          }).catch(err => console.error('Error enviando notificación de alerta:', err.message));
+        }
+      }
 
       await client.query('COMMIT');
       res.status(201).json({ ok: true, message: 'Movimiento registrado', id: movRows[0].id_movimiento });
@@ -125,6 +150,26 @@ const alertas = {
       );
 
       res.json({ ok: true, total: countRows[0].total, page: +page, limit: +limit, data: rows });
+    } catch (err) {
+      res.status(500).json({ ok: false, message: err.message });
+    }
+  },
+
+  /** POST /api/alertas/:id/notificar — reenviar el correo de una alerta puntual */
+  async notificar(req, res) {
+    try {
+      const { rows } = await query(
+        `SELECT a.tipo, a.nombre, a.descripcion, p.nombre AS producto_nombre, p.codigo AS producto_codigo
+         FROM ALERTAS a LEFT JOIN PRODUCTOS p ON a.id_producto = p.id_producto
+         WHERE a.id_alerta = $1`,
+        [req.params.id]
+      );
+      if (!rows[0]) return res.status(404).json({ ok: false, message: 'Alerta no encontrada' });
+
+      const resultado = await enviarAlertaStock(rows[0]);
+      if (!resultado.ok) return res.status(502).json({ ok: false, message: resultado.message });
+
+      res.json({ ok: true, message: 'Notificación enviada', destinatarios: resultado.destinatarios });
     } catch (err) {
       res.status(500).json({ ok: false, message: err.message });
     }
@@ -189,6 +234,22 @@ const categorias = {
 // ══════════════════════════════════════════════
 
 const dashboard = {
+  /** GET /api/dashboard/ventas-semana — total vendido por día, últimos 7 días */
+  async ventasSemana(req, res) {
+    try {
+      const { rows } = await query(`
+        SELECT to_char(d::date, 'DY') AS dia, to_char(d::date, 'YYYY-MM-DD') AS fecha,
+               COALESCE(SUM(v.total), 0)::float AS total
+        FROM generate_series(CURRENT_DATE - INTERVAL '6 days', CURRENT_DATE, INTERVAL '1 day') d
+        LEFT JOIN VENTAS v ON v.fecha_venta::date = d::date AND v.estado = 'Pagada'
+        GROUP BY d, dia
+        ORDER BY d
+      `);
+      res.json({ ok: true, data: rows });
+    } catch (err) {
+      res.status(500).json({ ok: false, message: err.message });
+    }
+  },
   async stats(req, res) {
     try {
       const queries = {

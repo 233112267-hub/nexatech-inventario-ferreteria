@@ -17,14 +17,17 @@
   .kpi-info p{font-size:.72rem;color:var(--muted);margin-top:.2rem;}
   .kn-red{color:#dc2626;}.kn-amber{color:#d97706;}.kn-blue{color:#2563a8;}.kn-green{color:#16a34a;}
   .type-badge{display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:20px;font-size:.72rem;font-weight:700;white-space:nowrap;}
-  .type-critica{background:#fee2e2;color:#dc2626;}.type-advertencia{background:#fef3c7;color:#d97706;}.type-informativa{background:#dbeafe;color:#2563a8;}
+  .type-critica{background:#fee2e2;color:#dc2626;}.type-advertencia{background:#fef3c7;color:#d97706;}
   .estado-badge{display:inline-block;padding:3px 10px;border-radius:20px;font-size:.72rem;font-weight:700;}
-  .eb-pendiente{background:#fef3c7;color:#d97706;}.eb-resuelta{background:#dcfce7;color:#16a34a;}.eb-informativa{background:#dbeafe;color:#2563a8;}
+  .eb-pendiente{background:#fef3c7;color:#d97706;}.eb-resuelta{background:#dcfce7;color:#16a34a;}
   .prod-cell{display:flex;align-items:center;gap:.6rem;}
   .prod-thumb{width:34px;height:34px;background:var(--bg);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:1.1rem;flex-shrink:0;}
   .act-resolve{width:30px;height:30px;border-radius:7px;border:none;background:#dcfce7;color:#16a34a;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;transition:opacity .15s;}
   .act-resolve:hover{opacity:.7;}
   .act-resolve svg{width:14px;height:14px;}
+  .act-notify{width:30px;height:30px;border-radius:7px;border:none;background:#dbeafe;color:#2563a8;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;transition:opacity .15s;margin-right:6px;}
+  .act-notify:hover{opacity:.7;}
+  .act-notify svg{width:14px;height:14px;}
   @media(max-width:1024px){.kpi-grid{grid-template-columns:repeat(2,1fr);}}
 </style>
 </head>
@@ -57,13 +60,12 @@
     <div class="kpi-grid">
       <div class="kpi-card"><div class="kpi-icon ki-red"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></div><div class="kpi-info"><small>Críticas</small><strong class="kn-red" id="cntCritica">—</strong><p>Atención inmediata</p></div></div>
       <div class="kpi-card"><div class="kpi-icon ki-amber"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg></div><div class="kpi-info"><small>Advertencias</small><strong class="kn-amber" id="cntAdvert">—</strong><p>Atención pronto</p></div></div>
-      <div class="kpi-card"><div class="kpi-icon ki-blue"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg></div><div class="kpi-info"><small>Informativas</small><strong class="kn-blue" id="cntInfo">—</strong><p>Para tu conocimiento</p></div></div>
       <div class="kpi-card"><div class="kpi-icon ki-green"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg></div><div class="kpi-info"><small>Resueltas</small><strong class="kn-green" id="cntResuelta">—</strong><p>Últimos 30 días</p></div></div>
     </div>
     <div class="filters" style="flex-wrap:wrap;">
       <div class="filter-search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg><input type="text" id="searchInput" placeholder="Buscar alerta..."></div>
-      <div class="filter-group"><label>Tipo</label><select id="tipoFilter"><option value="">Todas</option><option value="Crítica">Crítica</option><option value="Advertencia">Advertencia</option><option value="Informativa">Informativa</option></select></div>
-      <div class="filter-group"><label>Estado</label><select id="estadoFilter"><option value="">Todos</option><option value="Pendiente">Pendiente</option><option value="Resuelta">Resuelta</option><option value="Informativa">Informativa</option></select></div>
+      <div class="filter-group"><label>Tipo</label><select id="tipoFilter"><option value="">Todas</option><option value="Crítica">Crítica</option><option value="Advertencia">Advertencia</option></select></div>
+      <div class="filter-group"><label>Estado</label><select id="estadoFilter"><option value="">Todos</option><option value="Pendiente">Pendiente</option><option value="Resuelta">Resuelta</option></select></div>
       <button class="btn-clear" onclick="clearFilters()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>Limpiar</button>
     </div>
     <div class="table-wrap">
@@ -80,23 +82,21 @@ checkAuth(); setupLogout(); renderUserInfo();
 let currentPage=1, allAlertas=[];
 
 async function loadKPIs(){
-  const [crit,adv,info,res]=await Promise.all([
+  const [crit,adv,res]=await Promise.all([
     apiFetch('/alertas?tipo=Crítica&estado=Pendiente&limit=1'),
     apiFetch('/alertas?tipo=Advertencia&estado=Pendiente&limit=1'),
-    apiFetch('/alertas?tipo=Informativa&limit=1'),
     apiFetch('/alertas?estado=Resuelta&limit=1'),
   ]);
   document.getElementById('cntCritica').textContent=crit?.total??0;
   document.getElementById('cntAdvert').textContent=adv?.total??0;
-  document.getElementById('cntInfo').textContent=info?.total??0;
   document.getElementById('cntResuelta').textContent=res?.total??0;
   const pending=(crit?.total??0)+(adv?.total??0);
   document.getElementById('alertBadge').textContent=pending;
   document.getElementById('alertDot').textContent=pending;
 }
 
-function typeBadge(t){const cls=t==='Crítica'?'type-critica':t==='Advertencia'?'type-advertencia':'type-informativa';return`<span class="type-badge ${cls}">${t}</span>`;}
-function estadoBadge(e){const cls=e==='Pendiente'?'eb-pendiente':e==='Resuelta'?'eb-resuelta':'eb-informativa';return`<span class="estado-badge ${cls}">${e}</span>`;}
+function typeBadge(t){const cls=t==='Crítica'?'type-critica':'type-advertencia';return`<span class="type-badge ${cls}">${t}</span>`;}
+function estadoBadge(e){const cls=e==='Pendiente'?'eb-pendiente':'eb-resuelta';return`<span class="estado-badge ${cls}">${e}</span>`;}
 
 async function loadAlertas(){
   const q=document.getElementById('searchInput').value;
@@ -115,12 +115,20 @@ async function loadAlertas(){
       <td style="font-size:.82rem;color:var(--muted);max-width:250px;">${a.descripcion||'—'}</td>
       <td>${estadoBadge(a.estado)}</td>
       <td style="white-space:nowrap;">
+        ${a.estado==='Pendiente'?`<button class="act-notify" onclick="notifyAlert(${a.id})" title="Notificar por correo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 6l-10 7L2 6"/><rect x="2" y="4" width="20" height="16" rx="2"/></svg></button>`:''}
         ${a.estado==='Pendiente'?`<button class="act-resolve" onclick="resolveAlert(${a.id})" title="Marcar resuelta"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg></button>`:''}
       </td>
     </tr>`;
   }).join('')||'<tr><td colspan="6" style="text-align:center;padding:2rem;color:var(--muted);">Sin alertas</td></tr>';
 
   renderPagination('paginationBtns','paginationInfo',currentPage,data.total,8,`(p)=>{currentPage=p;loadAlertas();}`);
+}
+
+async function notifyAlert(id){
+  const data=await apiFetch(`/alertas/${id}/notificar`,{method:'POST'});
+  if(!data)return;
+  if(!data.ok){showToast(data.message||'No se pudo enviar el correo','error');return;}
+  showToast('Correo de notificación enviado','success');
 }
 
 async function resolveAlert(id){

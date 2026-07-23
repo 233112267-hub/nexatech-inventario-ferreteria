@@ -136,6 +136,21 @@
 <script src="shared.js"></script>
 <script>
 checkAuth(); setupLogout(); renderUserInfo();
+
+// Solo Administrador y Vendedor pueden registrar ventas; Almacenista no.
+(function restringirAlmacenista(){
+  const user=JSON.parse(localStorage.getItem('user')||'{}');
+  if(user.rol==='Almacenista'){
+    const btn=document.getElementById('btnFinalizar');
+    if(btn){
+      btn.disabled=true;
+      btn.style.opacity='.5';
+      btn.style.cursor='not-allowed';
+      btn.title='Tu rol (Almacenista) no puede registrar ventas';
+    }
+    showToast('Tu rol no tiene permiso para registrar ventas','error');
+  }
+})();
 const EMOJIS={Herramientas:'🔧',Ferretería:'🪛',Materiales:'🧱',Pintura:'🎨',Eléctricos:'⚡',Plomería:'🚿',Seguridad:'🧤'};
 let cart=[], prodPage=1, allProds=[], filteredProds=[];
 
@@ -153,7 +168,7 @@ async function loadProds(){
       <td style="font-family:monospace;font-size:.75rem;color:var(--muted);">${p.codigo}</td>
       <td><span class="${sc}">${p.stock}</span></td>
       <td style="font-weight:700;">$${Number(p.precio).toFixed(2)}</td>
-      <td>${p.stock>0?`<button class="btn-add-prod" onclick="addToCart(${p.id},'${p.nombre.replace(/'/g,"\\'")}','${p.categoria}',${p.precio},${p.stock})" title="Agregar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button>`:'<span style="font-size:.72rem;color:var(--red);font-weight:700;">Agotado</span>'}</td>
+      <td>${p.stock>0?`<button class="btn-add-prod" data-id="${p.id}" data-nombre="${p.nombre.replace(/"/g,'&quot;')}" data-categoria="${p.categoria}" data-precio="${p.precio}" data-stock="${p.stock}" onclick="addToCartFromBtn(this)" title="Agregar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button>`:'<span style="font-size:.72rem;color:var(--red);font-weight:700;">Agotado</span>'}</td>
     </tr>`;
   }).join('');
   renderPagination('prodPagBtns','prodPagInfo',prodPage,data.total,8,`(p)=>{prodPage=p;loadProds();}`);
@@ -161,16 +176,29 @@ async function loadProds(){
 
 document.getElementById('searchProd').addEventListener('input',()=>{prodPage=1;loadProds();});
 
-// Cargar usuarios para dropdown vendedor
+// Cargar usuarios (solo Vendedor y Administrador) para dropdown vendedor
 async function loadVendedores(){
-  const data=await apiFetch('/usuarios?estado=Activo&limit=50');
+  const data=await apiFetch('/usuarios/vendedores');
   if(!data||!data.ok) return;
   const user=JSON.parse(localStorage.getItem('user')||'{}');
   const sel=document.getElementById('saleVendedor');
-  sel.innerHTML='<option value="">Auto</option>'+data.data.map(u=>`<option value="${u.id}" ${u.id==user.id?'selected':''}>${u.nombre}</option>`).join('');
+  const porRol={};
+  data.data.forEach(u=>{ (porRol[u.rol]=porRol[u.rol]||[]).push(u); });
+  const grupos=Object.keys(porRol).map(rol=>
+    `<optgroup label="${rol}">${porRol[rol].map(u=>`<option value="${u.id}" ${u.id==user.id?'selected':''}>${u.nombre}</option>`).join('')}</optgroup>`
+  ).join('');
+  sel.innerHTML='<option value="">Auto</option>'+grupos;
 }
 
 // Carrito
+function addToCartFromBtn(btn){
+  const id = Number(btn.dataset.id);
+  const nombre = btn.dataset.nombre.replace(/&quot;/g,'"');
+  const cat = btn.dataset.categoria;
+  const precio = Number(btn.dataset.precio);
+  const stock = Number(btn.dataset.stock);
+  addToCart(id, nombre, cat, precio, stock);
+}
 function addToCart(id,nombre,cat,precio,stock){
   const existing=cart.find(x=>x.id===id);
   if(existing){

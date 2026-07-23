@@ -65,6 +65,7 @@ router.post('/auth/change-password', authMiddleware, authCtrl.changePassword);
  *     security: [{ bearerAuth: [] }]
  */
 router.get('/dashboard/stats', authMiddleware, dashboard.stats);
+router.get('/dashboard/ventas-semana', authMiddleware, dashboard.ventasSemana);
 
 // ── USUARIOS ──────────────────────────────────────────────────────────────────
 /**
@@ -82,9 +83,11 @@ router.get('/dashboard/stats', authMiddleware, dashboard.stats);
  *       - { in: query, name: limit,  schema: { type: integer, default: 10 } }
  */
 router.get('/usuarios',    authMiddleware, roleMiddleware('Administrador'), usuariosCtrl.getAll);
+router.get('/usuarios/vendedores', authMiddleware, roleMiddleware('Administrador','Vendedor'), usuariosCtrl.vendedores);
 router.get('/usuarios/:id',authMiddleware, roleMiddleware('Administrador'), usuariosCtrl.getOne);
 router.post('/usuarios',   authMiddleware, roleMiddleware('Administrador'), usuariosCtrl.create);
 router.put('/usuarios/:id',authMiddleware, roleMiddleware('Administrador'), usuariosCtrl.update);
+router.patch('/usuarios/:id',authMiddleware, roleMiddleware('Administrador'), usuariosCtrl.update);
 router.delete('/usuarios/:id', authMiddleware, roleMiddleware('Administrador'), usuariosCtrl.remove);
 
 // ── CATEGORÍAS ────────────────────────────────────────────────────────────────
@@ -120,6 +123,7 @@ router.get('/productos',            authMiddleware, productosCtrl.getAll);
 router.get('/productos/:id',        authMiddleware, productosCtrl.getOne);
 router.post('/productos',           authMiddleware, roleMiddleware('Administrador','Almacenista'), productosCtrl.create);
 router.put('/productos/:id',        authMiddleware, roleMiddleware('Administrador','Almacenista'), productosCtrl.update);
+router.patch('/productos/:id',      authMiddleware, roleMiddleware('Administrador','Almacenista'), productosCtrl.update);
 router.delete('/productos/:id',     authMiddleware, roleMiddleware('Administrador'), productosCtrl.remove);
 
 // ── VENTAS ────────────────────────────────────────────────────────────────────
@@ -151,7 +155,7 @@ router.delete('/productos/:id',     authMiddleware, roleMiddleware('Administrado
  */
 router.get('/ventas',             authMiddleware, ventasCtrl.getAll);
 router.get('/ventas/:id',         authMiddleware, ventasCtrl.getOne);
-router.post('/ventas',            authMiddleware, ventasCtrl.create);
+router.post('/ventas',            authMiddleware, roleMiddleware('Administrador','Vendedor'), ventasCtrl.create);
 router.patch('/ventas/:id/cancelar', authMiddleware, roleMiddleware('Administrador'), ventasCtrl.cancelar);
 
 // ── MOVIMIENTOS ───────────────────────────────────────────────────────────────
@@ -176,6 +180,17 @@ router.post('/movimientos', authMiddleware, roleMiddleware('Administrador','Alma
  *     security: [{ bearerAuth: [] }]
  */
 router.get('/alertas',                  authMiddleware, alertas.getAll);
+/**
+ * @swagger
+ * /alertas/{id}/notificar:
+ *   post:
+ *     tags: [Alertas]
+ *     summary: Reenviar por correo la notificación de una alerta a los administradores
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: path, name: id, required: true, schema: { type: integer } }
+ */
+router.post('/alertas/:id/notificar',   authMiddleware, alertas.notificar);
 router.patch('/alertas/:id/resolver',   authMiddleware, alertas.resolver);
 
 module.exports = router;

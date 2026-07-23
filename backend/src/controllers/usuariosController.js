@@ -7,6 +7,22 @@ const COLS = `u.id_usuario AS id, u.nombre, u.username AS usuario, u.email AS co
               u.created_at, u.updated_at`;
 const JOIN = `FROM USUARIOS u JOIN ROLES r ON u.id_rol = r.id_rol`;
 
+/** GET /api/usuarios/vendedores — lista ligera (id, nombre, rol) de quienes pueden vender.
+ *  Accesible por Administrador y Vendedor, sin exponer el resto de datos de USUARIOS. */
+const vendedores = async (req, res) => {
+  try {
+    const { rows } = await query(
+      `SELECT u.id_usuario AS id, u.nombre, r.nombre AS rol
+       FROM USUARIOS u JOIN ROLES r ON u.id_rol = r.id_rol
+       WHERE u.activo = TRUE AND r.nombre IN ('Vendedor','Administrador')
+       ORDER BY r.nombre, u.nombre`
+    );
+    res.json({ ok: true, data: rows });
+  } catch (err) {
+    res.status(500).json({ ok: false, message: err.message });
+  }
+};
+
 /** GET /api/usuarios */
 const getAll = async (req, res) => {
   try {
@@ -119,4 +135,4 @@ const remove = async (req, res) => {
   }
 };
 
-module.exports = { getAll, getOne, create, update, remove };
+module.exports = { getAll, getOne, create, update, remove, vendedores };

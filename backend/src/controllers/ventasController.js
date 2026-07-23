@@ -1,4 +1,5 @@
 const { query, pool } = require('../config/database');
+const { enviarAlertaStock } = require('../services/emailService');
 
 /** GET /api/ventas */
 const getAll = async (req, res) => {
@@ -76,7 +77,7 @@ const create = async (req, res) => {
     const productData = {};
     for (const item of items) {
       const { rows } = await client.query(
-        `SELECT id_producto, nombre, precio_venta, stock_actual, stock_minimo
+        `SELECT id_producto, nombre, codigo, precio_venta, stock_actual, stock_minimo
          FROM PRODUCTOS WHERE id_producto = $1 AND estado = 'Activo' FOR UPDATE`,
         [item.producto_id]
       );
@@ -132,11 +133,26 @@ const create = async (req, res) => {
       if (newStock <= prod.stock_minimo) {
         const tipo = newStock === 0 ? 'Critica' : 'Advertencia';
         const nombreAlerta = newStock === 0 ? 'Sin stock' : 'Stock bajo';
+        const descripcionAlerta = newStock === 0
+          ? `Sin unidades disponibles (mínimo: ${prod.stock_minimo}).`
+          : `Quedan ${newStock} unidades (mínimo: ${prod.stock_minimo}).`;
         await client.query(
           `INSERT INTO ALERTAS (tipo, nombre, descripcion, id_producto)
            VALUES ($1,$2,$3,$4)`,
-          [tipo, nombreAlerta, `Stock actual (${newStock}) <= mínimo tras venta ${folio}.`, item.producto_id]
+          [tipo, nombreAlerta, descripcionAlerta, item.producto_id]
         );
+
+        // Notificación por correo solo para alertas críticas (sin stock),
+        // para no saturar el correo con cada venta que baje de mínimo.
+        if (tipo === 'Critica') {
+          enviarAlertaStock({
+            tipo,
+            nombre: nombreAlerta,
+            descripcion: descripcionAlerta,
+            producto_nombre: prod.nombre,
+            producto_codigo: prod.codigo,
+          }).catch(err => console.error('Error enviando notificación de alerta:', err.message));
+        }
       }
     }
 
