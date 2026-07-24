@@ -2,7 +2,9 @@
 // FERRETERÍA — shared.js  (incluir en todas las páginas)
 // ============================================================
 
-const API = 'http://localhost:3000/api';
+const API = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+  ? 'http://127.0.0.1:8000/api'
+  : 'https://nexatech-inventario-ferreteria-final.onrender.com/api';
 
 // ── Auth guard ───────────────────────────────────────────────
 function checkAuth() {
