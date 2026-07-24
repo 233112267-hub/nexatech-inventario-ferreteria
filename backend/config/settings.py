@@ -8,13 +8,15 @@ from dotenv import load_dotenv
 import dj_database_url
 
 BASE_DIR = Path(__file__).resolve().parent.parent
-load_dotenv(BASE_DIR / '.env')
+load_dotenv(BASE_DIR / '.env', override=True)
 
 SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY', 'django-insecure-cambia-esto-en-produccion')
 DEBUG = os.environ.get('DEBUG', 'True') == 'True'
 ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', '*').split(',')
 
 INSTALLED_APPS = [
+    'django.contrib.contenttypes',
+    'django.contrib.auth',
     'corsheaders',
     'rest_framework',
     'usuarios',
@@ -44,7 +46,7 @@ TEMPLATES = [
 WSGI_APPLICATION = 'config.wsgi.application'
 
 # ── Base de datos: la MISMA de Neon que ya usa tu backend Express ─────────
-DATABASE_URL = os.environ.get('DATABASE_URL')
+DATABASE_URL = 'postgresql://neondb_owner:npg_7VCpTt0xHEfQ@ep-small-hill-awvoo93j-pooler.c-12.us-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require'
 if DATABASE_URL:
     DATABASES = {
         'default': dj_database_url.parse(DATABASE_URL, conn_max_age=600, ssl_require=True)
