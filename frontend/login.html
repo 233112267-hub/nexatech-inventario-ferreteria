@@ -5,124 +5,129 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Ferretería — Iniciar Sesión</title>
 <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
 <style>
-  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   :root {
     --navy: #1a2340; --blue-mid: #2563a8; --gold: #f5a623;
-    --text-main: #1e293b; --text-muted: #64748b; --border: #e2e8f0; --white: #ffffff;
+    --text-main: #1e293b; --text-muted: #64748b; --border: #e2e8f0;
+    --bs-primary: var(--blue-mid);
+    --bs-primary-rgb: 37,99,168;
+    --bs-body-font-family: 'Nunito', sans-serif;
+    --bs-border-radius: .625rem;
   }
-  body { min-height:100vh; display:flex; font-family:'Nunito',sans-serif; background:#e8edf5; overflow:hidden; }
-  .left {
-    width:52%; background:linear-gradient(145deg,#1a2a4a 0%,#1e3a6e 60%,#243f7a 100%);
-    display:flex; flex-direction:column; align-items:center; justify-content:center;
-    padding:3rem; position:relative; overflow:hidden;
+  body { font-family:'Nunito',sans-serif; background:#e8edf5; overflow:hidden; }
+  .vh-100-lg { min-height:100vh; }
+  .left-panel {
+    background:linear-gradient(145deg,#1a2a4a 0%,#1e3a6e 60%,#243f7a 100%);
+    position:relative; overflow:hidden;
   }
-  .left::before { content:''; position:absolute; inset:0; background:url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none'%3E%3Cg fill='%23ffffff' fill-opacity='0.03'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E"); }
+  .left-panel::before { content:''; position:absolute; inset:0; background:url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none'%3E%3Cg fill='%23ffffff' fill-opacity='0.03'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E"); }
   .circle2 { position:absolute; width:350px; height:350px; border-radius:50%; border:1px solid rgba(255,255,255,0.06); bottom:-100px; right:-80px; }
-  .brand { position:relative; z-index:1; text-align:center; }
-  .logo-icon { width:110px; height:110px; margin:0 auto 1.5rem; display:flex; align-items:center; justify-content:center; }
-  .logo-icon svg { width:100%; height:100%; }
-  .brand h1 { font-size:2.6rem; font-weight:800; color:#fff; letter-spacing:3px; text-transform:uppercase; margin-bottom:.4rem; }
-  .brand p { color:rgba(255,255,255,0.6); font-size:.95rem; font-weight:500; letter-spacing:1px; text-transform:uppercase; }
-  .tools-img { position:relative; z-index:1; margin-top:3rem; width:320px; display:flex; align-items:flex-end; justify-content:center; gap:1rem; }
-  .tool-card { background:rgba(255,255,255,0.07); border:1px solid rgba(255,255,255,0.12); border-radius:16px; padding:1.2rem; display:flex; flex-direction:column; align-items:center; gap:.5rem; transition:transform .3s; }
+  .brand-title { font-size:2.6rem; font-weight:800; color:#fff; letter-spacing:3px; text-transform:uppercase; }
+  .brand-sub { color:rgba(255,255,255,0.6); font-size:.95rem; font-weight:500; letter-spacing:1px; text-transform:uppercase; }
+  .tool-card { background:rgba(255,255,255,0.07); border:1px solid rgba(255,255,255,0.12); border-radius:16px; transition:transform .3s; }
   .tool-card:hover { transform:translateY(-4px); }
-  .tool-card .icon { font-size:2rem; }
-  .tool-card span { font-size:.7rem; color:rgba(255,255,255,0.55); font-weight:600; text-transform:uppercase; letter-spacing:.5px; }
-  .right { width:48%; background:var(--white); display:flex; align-items:center; justify-content:center; padding:3rem 4rem; }
-  .form-box { width:100%; max-width:380px; }
-  .form-box h2 { font-size:1.9rem; font-weight:800; color:var(--text-main); margin-bottom:.4rem; }
-  .form-box .subtitle { color:var(--text-muted); font-size:.9rem; margin-bottom:2.2rem; }
-  .field { margin-bottom:1.3rem; }
-  label { display:block; font-size:.83rem; font-weight:700; color:var(--text-main); margin-bottom:.45rem; letter-spacing:.3px; }
-  .input-wrap { position:relative; }
-  .input-wrap svg { position:absolute; left:13px; top:50%; transform:translateY(-50%); color:var(--text-muted); width:18px; height:18px; }
-  input[type="text"], input[type="password"] { width:100%; padding:.78rem 1rem .78rem 2.6rem; border:1.5px solid var(--border); border-radius:10px; font-family:'Nunito',sans-serif; font-size:.92rem; color:var(--text-main); background:#f8fafc; transition:border-color .2s,box-shadow .2s,background .2s; outline:none; }
-  input::placeholder { color:#b0bac7; }
-  input:focus { border-color:var(--blue-mid); background:var(--white); box-shadow:0 0 0 3px rgba(37,99,168,0.1); }
-  .toggle-pass { position:absolute; right:12px; top:50%; transform:translateY(-50%); background:none; border:none; cursor:pointer; color:var(--text-muted); padding:2px; display:flex; align-items:center; }
-  .toggle-pass svg { width:18px; height:18px; }
-  .row { display:flex; align-items:center; justify-content:space-between; margin-bottom:1.8rem; margin-top:.3rem; }
-  .checkbox-wrap { display:flex; align-items:center; gap:.5rem; cursor:pointer; }
-  .checkbox-wrap input[type="checkbox"] { width:16px; height:16px; accent-color:var(--blue-mid); cursor:pointer; }
-  .checkbox-wrap span { font-size:.85rem; color:var(--text-muted); font-weight:600; }
-  .forgot { font-size:.83rem; color:var(--blue-mid); font-weight:700; text-decoration:none; transition:color .2s; }
+  .tool-card span.icon { font-size:2rem; }
+  .tool-card span.label { font-size:.7rem; color:rgba(255,255,255,0.55); font-weight:600; text-transform:uppercase; letter-spacing:.5px; }
+  .form-box { max-width:380px; width:100%; }
+  .form-box h2 { font-weight:800; color:var(--text-main); }
+  .form-box .subtitle { color:var(--text-muted); }
+  label.form-label { font-size:.83rem; font-weight:700; color:var(--text-main); }
+  .input-icon-wrap { position:relative; }
+  .input-icon-wrap svg.field-icon { position:absolute; left:13px; top:50%; transform:translateY(-50%); color:var(--text-muted); width:18px; height:18px; z-index:5; }
+  .input-icon-wrap .form-control { padding-left:2.6rem; background:#f8fafc; border-color:var(--border); }
+  .input-icon-wrap .form-control:focus { border-color:var(--blue-mid); background:#fff; box-shadow:0 0 0 .2rem rgba(37,99,168,.1); }
+  .toggle-pass { position:absolute; right:8px; top:50%; transform:translateY(-50%); background:none; border:none; cursor:pointer; color:var(--text-muted); z-index:5; }
+  .forgot { font-size:.83rem; color:var(--blue-mid); font-weight:700; text-decoration:none; }
   .forgot:hover { color:var(--navy); }
-  .btn-login { width:100%; padding:.88rem; background:linear-gradient(135deg,var(--blue-mid) 0%,#1a3f80 100%); color:white; border:none; border-radius:10px; font-family:'Nunito',sans-serif; font-size:1rem; font-weight:700; cursor:pointer; letter-spacing:.5px; transition:opacity .2s,transform .15s; position:relative; overflow:hidden; }
-  .btn-login:hover { opacity:.93; transform:translateY(-1px); }
-  .btn-login:active { transform:translateY(0); }
-  .btn-login.loading { opacity:.7; pointer-events:none; }
-  .spinner { display:none; width:18px; height:18px; border:2.5px solid rgba(255,255,255,0.4); border-top-color:white; border-radius:50%; animation:spin .7s linear infinite; margin:0 auto; }
-  @keyframes spin { to { transform:rotate(360deg); } }
+  .btn-login { background:linear-gradient(135deg,var(--blue-mid) 0%,#1a3f80 100%); border:none; font-weight:700; letter-spacing:.5px; padding:.78rem; }
+  .btn-login:hover { opacity:.93; color:#fff; }
   .btn-login.loading .btn-text { display:none; }
-  .btn-login.loading .spinner { display:block; }
-  .error-msg { background:#fef2f2; border:1px solid #fca5a5; border-radius:8px; padding:.7rem 1rem; font-size:.84rem; color:#b91c1c; font-weight:600; margin-bottom:1.2rem; display:none; }
-  .footer-note { text-align:center; font-size:.8rem; color:var(--text-muted); margin-top:2rem; }
+  .btn-login.loading .spinner-border { display:inline-block !important; }
+  .footer-note { font-size:.8rem; color:var(--text-muted); }
   .footer-note strong { color:var(--blue-mid); }
-  @media(max-width:768px){ body{flex-direction:column;} .left{width:100%;padding:2rem;min-height:220px;} .right{width:100%;padding:2rem;} .tools-img{display:none;} .brand h1{font-size:1.8rem;} }
+  @media(max-width:991.98px){ body{ overflow:auto; } .left-panel{ min-height:220px; } .tools-img{ display:none; } .brand-title{ font-size:1.8rem; } }
 </style>
 </head>
 <body>
-<div class="left">
-  <div class="circle2"></div>
-  <div class="brand">
-    <div class="logo-icon">
-      <svg viewBox="0 0 120 120" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path d="M60 10 L67 6 L70 14 L79 12 L80 21 L89 22 L88 31 L96 35 L93 44 L100 50 L95 58 L100 66 L93 72 L96 81 L88 85 L89 94 L80 95 L79 104 L70 102 L67 110 L60 106 L53 110 L50 102 L41 104 L40 95 L31 94 L32 85 L24 81 L27 72 L20 66 L25 58 L20 50 L27 44 L24 35 L32 31 L31 22 L40 21 L41 12 L50 14 L53 6 Z" fill="#f5a623" opacity=".9"/>
-        <circle cx="60" cy="58" r="22" fill="#1a2a4a"/>
-        <ellipse cx="60" cy="55" rx="16" ry="10" fill="#f5a623"/>
-        <rect x="44" y="60" width="32" height="5" rx="2.5" fill="#f5a623"/>
-        <rect x="48" y="50" width="24" height="8" rx="4" fill="#fcd34d"/>
-        <line x1="50" y1="72" x2="42" y2="82" stroke="white" stroke-width="3" stroke-linecap="round"/>
-        <circle cx="42" cy="82" r="4" fill="none" stroke="white" stroke-width="2.5"/>
-      </svg>
+<div class="container-fluid vh-100-lg">
+  <div class="row vh-100-lg g-0">
+
+    <!-- Panel izquierdo -->
+    <div class="col-lg-6 left-panel d-flex flex-column align-items-center justify-content-center text-center p-4 p-lg-5">
+      <div class="circle2"></div>
+      <div class="position-relative z-1">
+        <div class="mx-auto mb-3" style="width:110px;height:110px;">
+          <svg viewBox="0 0 120 120" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M60 10 L67 6 L70 14 L79 12 L80 21 L89 22 L88 31 L96 35 L93 44 L100 50 L95 58 L100 66 L93 72 L96 81 L88 85 L89 94 L80 95 L79 104 L70 102 L67 110 L60 106 L53 110 L50 102 L41 104 L40 95 L31 94 L32 85 L24 81 L27 72 L20 66 L25 58 L20 50 L27 44 L24 35 L32 31 L31 22 L40 21 L41 12 L50 14 L53 6 Z" fill="#f5a623" opacity=".9"/>
+            <circle cx="60" cy="58" r="22" fill="#1a2a4a"/>
+            <ellipse cx="60" cy="55" rx="16" ry="10" fill="#f5a623"/>
+            <rect x="44" y="60" width="32" height="5" rx="2.5" fill="#f5a623"/>
+            <rect x="48" y="50" width="24" height="8" rx="4" fill="#fcd34d"/>
+            <line x1="50" y1="72" x2="42" y2="82" stroke="white" stroke-width="3" stroke-linecap="round"/>
+            <circle cx="42" cy="82" r="4" fill="none" stroke="white" stroke-width="2.5"/>
+          </svg>
+        </div>
+        <h1 class="brand-title mb-1">Ferretería</h1>
+        <p class="brand-sub">Sistema de Inventario y Ventas</p>
+      </div>
+      <div class="tools-img position-relative z-1 mt-5 d-flex gap-3">
+        <div class="tool-card p-3 d-flex flex-column align-items-center gap-2"><span class="icon">🔧</span><span class="label">Herramientas</span></div>
+        <div class="tool-card p-3 d-flex flex-column align-items-center gap-2"><span class="icon">📦</span><span class="label">Inventario</span></div>
+        <div class="tool-card p-3 d-flex flex-column align-items-center gap-2"><span class="icon">📊</span><span class="label">Reportes</span></div>
+      </div>
     </div>
-    <h1>Ferretería</h1>
-    <p>Sistema de Inventario y Ventas</p>
-  </div>
-  <div class="tools-img">
-    <div class="tool-card"><span class="icon">🔧</span><span>Herramientas</span></div>
-    <div class="tool-card"><span class="icon">📦</span><span>Inventario</span></div>
-    <div class="tool-card"><span class="icon">📊</span><span>Reportes</span></div>
+
+    <!-- Panel derecho: form -->
+    <div class="col-lg-6 bg-white d-flex align-items-center justify-content-center p-4 p-lg-5">
+      <div class="form-box">
+        <h2 class="mb-1 fs-2">Iniciar Sesión</h2>
+        <p class="subtitle mb-4">Ingresa tus credenciales para continuar</p>
+
+        <div class="alert alert-danger py-2 px-3 fw-semibold small d-none" id="errorMsg" role="alert">Usuario o contraseña incorrectos.</div>
+
+        <form onsubmit="return false;">
+          <div class="mb-3">
+            <label for="usuario" class="form-label">Usuario</label>
+            <div class="input-icon-wrap">
+              <svg class="field-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+              <input type="text" class="form-control" id="usuario" placeholder="Ingresa tu usuario" autocomplete="username">
+            </div>
+          </div>
+          <div class="mb-3">
+            <label for="contrasena" class="form-label">Contraseña</label>
+            <div class="input-icon-wrap">
+              <svg class="field-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+              <input type="password" class="form-control" id="contrasena" placeholder="Ingresa tu contraseña" autocomplete="current-password">
+              <button class="toggle-pass" type="button" id="togglePass">
+                <svg id="eyeIcon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+              </button>
+            </div>
+          </div>
+          <div class="d-flex align-items-center justify-content-between mb-4 mt-1">
+            <div class="form-check">
+              <input class="form-check-input" type="checkbox" id="recordarme">
+              <label class="form-check-label small fw-semibold text-muted" for="recordarme">Recordarme</label>
+            </div>
+            <a href="javascript:void(0)" class="forgot">¿Olvidaste tu contraseña?</a>
+          </div>
+          <button class="btn btn-primary btn-login w-100" id="btnLogin" type="button">
+            <span class="btn-text">Ingresar al Sistema</span>
+            <span class="spinner-border spinner-border-sm d-none" role="status" aria-hidden="true"></span>
+          </button>
+        </form>
+        <p class="footer-note text-center mt-4">Sistema exclusivo para personal autorizado.<br><strong>Ferretería &copy; 2024</strong></p>
+      </div>
+    </div>
+
   </div>
 </div>
 
-<div class="right">
-  <div class="form-box">
-    <h2>Iniciar Sesión</h2>
-    <p class="subtitle">Ingresa tus credenciales para continuar</p>
-    <div class="error-msg" id="errorMsg">Usuario o contraseña incorrectos.</div>
-    <div class="field">
-      <label for="usuario">Usuario</label>
-      <div class="input-wrap">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-        <input type="text" id="usuario" placeholder="Ingresa tu usuario" autocomplete="username">
-      </div>
-    </div>
-    <div class="field">
-      <label for="contrasena">Contraseña</label>
-      <div class="input-wrap">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-        <input type="password" id="contrasena" placeholder="Ingresa tu contraseña" autocomplete="current-password">
-        <button class="toggle-pass" type="button" id="togglePass">
-          <svg id="eyeIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-        </button>
-      </div>
-    </div>
-    <div class="row">
-      <label class="checkbox-wrap"><input type="checkbox" id="recordarme"><span>Recordarme</span></label>
-      <a href="javascript:void(0)" class="forgot">¿Olvidaste tu contraseña?</a>
-    </div>
-    <button class="btn-login" id="btnLogin">
-      <span class="btn-text">Ingresar al Sistema</span>
-      <div class="spinner"></div>
-    </button>
-    <p class="footer-note">Sistema exclusivo para personal autorizado.<br><strong>Ferretería &copy; 2024</strong></p>
-  </div>
-</div>
-
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 <script>
-const API = 'http://localhost:3000/api';
+const API = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+  ? 'http://127.0.0.1:8000/api'
+  : 'https://nexatech-inventario-ferreteria-final.onrender.com/api';
 const btn = document.getElementById('btnLogin');
 const errorMsg = document.getElementById('errorMsg');
 
@@ -138,13 +143,15 @@ document.getElementById('togglePass').addEventListener('click', () => {
 btn.addEventListener('click', async () => {
   const user = document.getElementById('usuario').value.trim();
   const pass = document.getElementById('contrasena').value;
-  errorMsg.style.display = 'none';
+  errorMsg.classList.add('d-none');
   if (!user || !pass) {
     errorMsg.textContent = 'Por favor completa todos los campos.';
-    errorMsg.style.display = 'block';
+    errorMsg.classList.remove('d-none');
     return;
   }
   btn.classList.add('loading');
+  btn.querySelector('.spinner-border').classList.remove('d-none');
+  btn.disabled = true;
   try {
     const res = await fetch(`${API}/auth/login`, {
       method: 'POST',
@@ -157,14 +164,16 @@ btn.addEventListener('click', async () => {
       localStorage.setItem('user', JSON.stringify(data.user));
       window.location.href = 'dashboard.html';
     } else {
-      errorMsg.textContent = data.message || 'Credenciales incorrectas.';
-      errorMsg.style.display = 'block';
+      errorMsg.textContent = data.message || data.detail || 'Credenciales incorrectas.';
+      errorMsg.classList.remove('d-none');
     }
   } catch (e) {
     errorMsg.textContent = '⚠ No se pudo conectar con el servidor. ¿Está corriendo el backend?';
-    errorMsg.style.display = 'block';
+    errorMsg.classList.remove('d-none');
   } finally {
     btn.classList.remove('loading');
+    btn.querySelector('.spinner-border').classList.add('d-none');
+    btn.disabled = false;
   }
 });
 
