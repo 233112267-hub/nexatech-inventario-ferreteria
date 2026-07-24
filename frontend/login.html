@@ -156,7 +156,7 @@ btn.addEventListener('click', async () => {
     const res = await fetch(`${API}/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ usuario: user, password: pass })
+      body: JSON.stringify({ username: user, password: pass })
     });
     const data = await res.json();
     if (data.ok) {
