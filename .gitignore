@@ -1,9 +1,13 @@
 
 # PYTHON / DJANGO
-
 __pycache__/
-*.py[cod]
+*.pyc
+.env
+venv/
+env/
 *.sqlite3
+.DS_Store
+
 
 # Virtual environments
 venv/
@@ -19,12 +23,12 @@ staticfiles/
 
 .env
 
-
+# Corregido:La parte de Django en parte de usuarios se uso en usuarios; sin embargo 
 # NODE / FRONTEND
 
-node_modules/
-dist/
-build/
+#node_modules/
+#dist/
+#build/
 
 
 # VS CODE / IDEs
