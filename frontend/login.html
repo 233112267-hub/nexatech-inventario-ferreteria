@@ -109,7 +109,7 @@
               <input class="form-check-input" type="checkbox" id="recordarme">
               <label class="form-check-label small fw-semibold text-muted" for="recordarme">Recordarme</label>
             </div>
-            <a href="javascript:void(0)" class="forgot">¿Olvidaste tu contraseña?</a>
+            <a href="javascript:void(0)" class="forgot" data-bs-toggle="modal" data-bs-target="#forgotModal">¿Olvidaste tu contraseña?</a>
           </div>
           <button class="btn btn-primary btn-login w-100" id="btnLogin" type="button">
             <span class="btn-text">Ingresar al Sistema</span>
@@ -120,6 +120,80 @@
       </div>
     </div>
 
+  </div>
+</div>
+
+<!-- Modal: Recuperar contraseña -->
+<div class="modal fade" id="forgotModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content" style="border-radius:16px;border:none;">
+      <div class="modal-header border-0 pb-0">
+        <h5 class="modal-title fw-bold">Recuperar contraseña</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body pt-2">
+
+        <!-- Paso 1: correo -->
+        <div id="stepEmail">
+          <p class="subtitle small mb-3">Ingresa tu correo registrado y te enviaremos un código de verificación.</p>
+          <div class="alert alert-danger py-2 px-3 fw-semibold small d-none" id="fpErrorEmail"></div>
+          <div class="mb-3">
+            <label class="form-label">Correo</label>
+            <input type="email" class="form-control" id="fpEmail" placeholder="correo@ejemplo.com">
+          </div>
+          <button class="btn btn-primary btn-login w-100" id="btnSendCode" type="button">
+            <span class="btn-text">Enviar código</span>
+            <span class="spinner-border spinner-border-sm d-none" role="status"></span>
+          </button>
+        </div>
+
+        <!-- Paso 2: código -->
+        <div id="stepCode" class="d-none">
+          <p class="subtitle small mb-1">Ingresa el código de 6 dígitos que enviamos a</p>
+          <p class="fw-bold small mb-3" id="fpEmailDisplay"></p>
+          <div class="alert alert-danger py-2 px-3 fw-semibold small d-none" id="fpErrorCode"></div>
+          <div class="mb-2">
+            <input type="text" class="form-control text-center" id="fpCode" maxlength="6" inputmode="numeric"
+              placeholder="000000" style="letter-spacing:8px;font-size:1.4rem;font-weight:700;">
+          </div>
+          <p class="small text-center mb-3">
+            <span id="timerText" class="text-muted">El código vence en <strong id="countdown">60</strong>s</span>
+            <a href="javascript:void(0)" id="resendLink" class="forgot d-none">Reenviar código</a>
+          </p>
+          <button class="btn btn-primary btn-login w-100" id="btnVerifyCode" type="button">
+            <span class="btn-text">Verificar código</span>
+            <span class="spinner-border spinner-border-sm d-none" role="status"></span>
+          </button>
+        </div>
+
+        <!-- Paso 3: nueva contraseña -->
+        <div id="stepNewPass" class="d-none">
+          <p class="subtitle small mb-3">Crea tu nueva contraseña.</p>
+          <div class="alert alert-danger py-2 px-3 fw-semibold small d-none" id="fpErrorPass"></div>
+          <div class="mb-3">
+            <label class="form-label">Nueva contraseña</label>
+            <input type="password" class="form-control" id="fpNewPass" placeholder="Mínimo 6 caracteres">
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Confirmar contraseña</label>
+            <input type="password" class="form-control" id="fpNewPass2" placeholder="Repite la contraseña">
+          </div>
+          <button class="btn btn-primary btn-login w-100" id="btnResetPass" type="button">
+            <span class="btn-text">Actualizar contraseña</span>
+            <span class="spinner-border spinner-border-sm d-none" role="status"></span>
+          </button>
+        </div>
+
+        <!-- Paso 4: éxito -->
+        <div id="stepSuccess" class="d-none text-center py-3">
+          <div class="mb-3" style="font-size:3rem;">✅</div>
+          <h5 class="fw-bold mb-1">¡Contraseña actualizada!</h5>
+          <p class="subtitle small">Ya puedes iniciar sesión con tu nueva contraseña.</p>
+          <button class="btn btn-primary btn-login w-100 mt-2" data-bs-dismiss="modal" type="button">Ir a iniciar sesión</button>
+        </div>
+
+      </div>
+    </div>
   </div>
 </div>
 
@@ -178,6 +252,148 @@ btn.addEventListener('click', async () => {
 });
 
 document.addEventListener('keydown', e => { if (e.key === 'Enter') btn.click(); });
+
+// ── Recuperar contraseña ──────────────────────────────────────
+let fpEmailActual = '';
+let fpCountdownInterval = null;
+
+function fpShowStep(step) {
+  ['stepEmail', 'stepCode', 'stepNewPass', 'stepSuccess'].forEach(id => {
+    document.getElementById(id).classList.toggle('d-none', id !== step);
+  });
+}
+
+function fpSetLoading(btnEl, loading) {
+  btnEl.disabled = loading;
+  btnEl.querySelector('.spinner-border').classList.toggle('d-none', !loading);
+}
+
+function fpShowError(id, msg) {
+  const el = document.getElementById(id);
+  el.textContent = msg;
+  el.classList.remove('d-none');
+}
+
+function fpStartCountdown() {
+  let seconds = 60;
+  document.getElementById('countdown').textContent = seconds;
+  document.getElementById('timerText').classList.remove('d-none');
+  document.getElementById('resendLink').classList.add('d-none');
+  clearInterval(fpCountdownInterval);
+  fpCountdownInterval = setInterval(() => {
+    seconds--;
+    document.getElementById('countdown').textContent = seconds;
+    if (seconds <= 0) {
+      clearInterval(fpCountdownInterval);
+      document.getElementById('timerText').classList.add('d-none');
+      document.getElementById('resendLink').classList.remove('d-none');
+    }
+  }, 1000);
+}
+
+document.getElementById('forgotModal').addEventListener('hidden.bs.modal', () => {
+  clearInterval(fpCountdownInterval);
+  fpShowStep('stepEmail');
+  ['fpEmail', 'fpCode', 'fpNewPass', 'fpNewPass2'].forEach(id => document.getElementById(id).value = '');
+  ['fpErrorEmail', 'fpErrorCode', 'fpErrorPass'].forEach(id => document.getElementById(id).classList.add('d-none'));
+});
+
+async function fpEnviarCodigo() {
+  const email = document.getElementById('fpEmail').value.trim();
+  document.getElementById('fpErrorEmail').classList.add('d-none');
+  if (!email || !email.includes('@')) {
+    fpShowError('fpErrorEmail', 'Ingresa un correo válido.');
+    return;
+  }
+  const btnSend = document.getElementById('btnSendCode');
+  fpSetLoading(btnSend, true);
+  try {
+    const res = await fetch(`${API}/auth/forgot-password`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ correo: email })
+    });
+    const data = await res.json();
+    if (data.ok) {
+      fpEmailActual = email;
+      document.getElementById('fpEmailDisplay').textContent = email;
+      fpShowStep('stepCode');
+      fpStartCountdown();
+    } else {
+      fpShowError('fpErrorEmail', data.message || 'No se pudo enviar el código.');
+    }
+  } catch (e) {
+    fpShowError('fpErrorEmail', '⚠ No se pudo conectar con el servidor.');
+  } finally {
+    fpSetLoading(btnSend, false);
+  }
+}
+
+document.getElementById('btnSendCode').addEventListener('click', fpEnviarCodigo);
+document.getElementById('resendLink').addEventListener('click', fpEnviarCodigo);
+
+document.getElementById('btnVerifyCode').addEventListener('click', async () => {
+  const codigo = document.getElementById('fpCode').value.trim();
+  document.getElementById('fpErrorCode').classList.add('d-none');
+  if (codigo.length !== 6) {
+    fpShowError('fpErrorCode', 'El código debe tener 6 dígitos.');
+    return;
+  }
+  const btnVerify = document.getElementById('btnVerifyCode');
+  fpSetLoading(btnVerify, true);
+  try {
+    const res = await fetch(`${API}/auth/verify-code`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ correo: fpEmailActual, codigo })
+    });
+    const data = await res.json();
+    if (data.ok) {
+      clearInterval(fpCountdownInterval);
+      fpShowStep('stepNewPass');
+    } else {
+      fpShowError('fpErrorCode', data.message || 'Código incorrecto o expirado.');
+    }
+  } catch (e) {
+    fpShowError('fpErrorCode', '⚠ No se pudo conectar con el servidor.');
+  } finally {
+    fpSetLoading(btnVerify, false);
+  }
+});
+
+document.getElementById('btnResetPass').addEventListener('click', async () => {
+  const p1 = document.getElementById('fpNewPass').value;
+  const p2 = document.getElementById('fpNewPass2').value;
+  const codigo = document.getElementById('fpCode').value.trim();
+  document.getElementById('fpErrorPass').classList.add('d-none');
+  if (p1.length < 6) {
+    fpShowError('fpErrorPass', 'La contraseña debe tener al menos 6 caracteres.');
+    return;
+  }
+  if (p1 !== p2) {
+    fpShowError('fpErrorPass', 'Las contraseñas no coinciden.');
+    return;
+  }
+  const btnReset = document.getElementById('btnResetPass');
+  fpSetLoading(btnReset, true);
+  try {
+    const res = await fetch(`${API}/auth/reset-password`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ correo: fpEmailActual, codigo, nueva_password: p1 })
+    });
+    const data = await res.json();
+    if (data.ok) {
+      fpShowStep('stepSuccess');
+    } else {
+      fpShowError('fpErrorPass', data.message || 'No se pudo actualizar la contraseña.');
+    }
+  } catch (e) {
+    fpShowError('fpErrorPass', '⚠ No se pudo conectar con el servidor.');
+  } finally {
+    fpSetLoading(btnReset, false);
+  }
+});
 </script>
 </body>
 </html>
