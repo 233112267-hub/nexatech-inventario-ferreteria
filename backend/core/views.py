@@ -8,6 +8,7 @@ from django.http import JsonResponse
 from django.views.decorators.http import require_POST
 from django.views.decorators.csrf import csrf_exempt
 from .models import Empleado, Cliente
+from .models import Empleado, Cliente, Producto, Categoria, Surcusal
 from .jwt_utils import generar_jwt
 
 
@@ -111,5 +112,64 @@ def crear_producto_view(request):
             "nombre": producto.nombre,
             "precio": str(producto.precio),
             "catcve": categoria.catcve,
+        }
+    }, status=201)
+
+@csrf_exempt
+@require_POST
+@requiere_rol("Administrador")
+def crear_empleado_view(request):
+    """
+    Solo Administrador. Espera:
+    { "surcve": 1, "nombre": "...", "apellidopaterno": "...", "apellidomaterno": "...",
+      "rol": "Vendedor", "username": "...", "email": "...", "password": "..." }
+    """
+    data = json.loads(request.body)
+
+    surcve = data.get("surcve")
+    nombre = data.get("nombre")
+    apellidopaterno = data.get("apellidopaterno")
+    rol = data.get("rol")
+    username = data.get("username")
+    email = data.get("email")
+    password = data.get("password")
+
+    if not all([surcve, nombre, apellidopaterno, rol, username, email, password]):
+        return JsonResponse({"error": "Faltan campos obligatorios"}, status=400)
+
+    if rol not in ("Administrador", "Vendedor"):
+        return JsonResponse({"error": "Rol inválido. Use Administrador o Vendedor"}, status=400)
+
+    try:
+        sucursal = Surcusal.objects.get(surcve=surcve)
+    except Surcusal.DoesNotExist:
+        return JsonResponse({"error": "La sucursal indicada no existe"}, status=400)
+
+    if Empleado.objects.filter(username=username).exists():
+        return JsonResponse({"error": "El username ya está en uso"}, status=400)
+
+    if Empleado.objects.filter(email=email).exists():
+        return JsonResponse({"error": "El email ya está en uso"}, status=400)
+
+    password_hash = bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt(10)).decode("utf-8")
+
+    empleado = Empleado.objects.create(
+        surcve=sucursal,
+        nombre=nombre,
+        apellidopaterno=apellidopaterno,
+        apellidomaterno=data.get("apellidomaterno"),
+        rol=rol,
+        username=username,
+        email=email,
+        password=password_hash,
+    )
+
+    return JsonResponse({
+        "mensaje": "Empleado creado correctamente",
+        "empleado": {
+            "empcve": empleado.empcve,
+            "nombre": empleado.nombre,
+            "username": empleado.username,
+            "rol": empleado.rol,
         }
     }, status=201)
