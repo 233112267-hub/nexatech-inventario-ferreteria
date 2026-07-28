@@ -51,3 +51,32 @@ class Cliente(models.Model):
         managed = False
         db_table = 'cliente'
 
+class Categoria(models.Model):
+    catcve = models.AutoField(primary_key=True)
+    nombre = models.CharField(max_length=80)
+    descripcion = models.CharField(max_length=200, blank=True, null=True)
+    estatus = models.CharField(max_length=20, default='activo')
+    fecha = models.DateField(auto_now_add=True)
+
+    class Meta:
+        managed = False
+        db_table = 'categoria'
+
+
+class Producto(models.Model):
+    procve = models.AutoField(primary_key=True)
+    catcve = models.ForeignKey(Categoria, on_delete=models.DO_NOTHING, db_column='catcve')
+    descripcion = models.CharField(max_length=255, blank=True, null=True)
+    estatus = models.CharField(max_length=20, default='activo')
+    precio = models.DecimalField(max_digits=10, decimal_places=2)
+    fecha = models.DateField(auto_now_add=True)
+    modelo = models.CharField(max_length=50, blank=True, null=True)
+    marca = models.CharField(max_length=50, blank=True, null=True)
+    informacion_adicional = models.CharField(max_length=255, blank=True, null=True)
+    nombre = models.CharField(max_length=100)
+    color = models.CharField(max_length=30, blank=True, null=True)
+
+    class Meta:
+        managed = False
+        db_table = 'producto'
+        

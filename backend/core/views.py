@@ -62,3 +62,54 @@ def login_view(request):
     token = generar_jwt(payload)
 
     return JsonResponse({"token": token, "tipo": tipo, "rol": payload.get("rol")})
+
+from .models import Empleado, Cliente, Producto, Categoria
+from .jwt_utils import generar_jwt, requiere_rol
+
+
+@csrf_exempt
+@require_POST
+@requiere_rol("Administrador")
+def crear_producto_view(request):
+    """
+    Solo Administrador. Espera:
+    { "catcve": 1, "nombre": "...", "precio": 100.00, "descripcion": "...", 
+      "modelo": "...", "marca": "...", "color": "...", "informacion_adicional": "..." }
+    """
+    data = json.loads(request.body)
+
+    catcve = data.get("catcve")
+    nombre = data.get("nombre")
+    precio = data.get("precio")
+
+    if not catcve or not nombre or precio is None:
+        return JsonResponse({"error": "Faltan campos obligatorios: catcve, nombre, precio"}, status=400)
+
+    try:
+        categoria = Categoria.objects.get(catcve=catcve)
+    except Categoria.DoesNotExist:
+        return JsonResponse({"error": "La categoría indicada no existe"}, status=400)
+
+    if float(precio) <= 0:
+        return JsonResponse({"error": "El precio debe ser mayor a 0"}, status=400)
+
+    producto = Producto.objects.create(
+        catcve=categoria,
+        nombre=nombre,
+        precio=precio,
+        descripcion=data.get("descripcion"),
+        modelo=data.get("modelo"),
+        marca=data.get("marca"),
+        color=data.get("color"),
+        informacion_adicional=data.get("informacion_adicional"),
+    )
+
+    return JsonResponse({
+        "mensaje": "Producto creado correctamente",
+        "producto": {
+            "procve": producto.procve,
+            "nombre": producto.nombre,
+            "precio": str(producto.precio),
+            "catcve": categoria.catcve,
+        }
+    }, status=201)
