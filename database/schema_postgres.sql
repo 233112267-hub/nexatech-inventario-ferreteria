@@ -757,3 +757,44 @@ GRANT EXECUTE ON PROCEDURE sp_disminuir_stock(INT, INT) TO app_django;
 GRANT EXECUTE ON PROCEDURE sp_abastecer_stock(INT, INT) TO app_django;
 GRANT EXECUTE ON PROCEDURE sp_limpiar_descuentos() TO app_django;
 GRANT EXECUTE ON PROCEDURE sp_eliminar_producto(INT, VARCHAR) TO app_django;
+
+CREATE ROLE app_django LOGIN PASSWORD 'Dj4ng0_Ferr_App2026!';
+-- Necesita los mismos privilegios de lectura/escritura que usa la app en conjunto
+GRANT SELECT, INSERT, UPDATE ON ALL TABLES IN SCHEMA public TO app_django;
+GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO app_django;
+
+-- Ejecutar todos los procedimientos (la validación de rol ahora vive en Django, no en current_user)
+GRANT EXECUTE ON PROCEDURE sp_generar_token_reset(VARCHAR, VARCHAR, VARCHAR, VARCHAR) TO app_django;
+GRANT EXECUTE ON PROCEDURE sp_restablecer_password(VARCHAR, VARCHAR, VARCHAR, VARCHAR) TO app_django;
+
+select*from empleado;
+
+GRANT SELECT, INSERT, UPDATE ON ALL TABLES IN SCHEMA public TO app_django;
+GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO app_django;  -- USAGE aquí es sobre las secuencias, no el schema
+GRANT EXECUTE ON PROCEDURE sp_aplicar_descuento(INT, VARCHAR, NUMERIC) TO app_django;
+GRANT EXECUTE ON PROCEDURE sp_disminuir_stock(INT, INT) TO app_django;
+GRANT EXECUTE ON PROCEDURE sp_abastecer_stock(INT, INT) TO app_django;
+GRANT EXECUTE ON PROCEDURE sp_limpiar_descuentos() TO app_django;
+GRANT EXECUTE ON PROCEDURE sp_eliminar_producto(INT, VARCHAR) TO app_django;
+
+GRANT SELECT, INSERT, UPDATE ON ALL TABLES IN SCHEMA public TO app_django;
+GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO app_django;  -- USAGE aquí es sobre las secuencias, no el schema
+
+GRANT USAGE ON SCHEMA public TO app_django;
+
+SELECT has_schema_privilege('app_django', 'public', 'USAGE');
+
+SELECT has_table_privilege('app_django', 'public.empleado', 'SELECT');
+
+SELECT current_database();
+
+SELECT rolname, rolconfig FROM pg_roles WHERE rolname = 'app_django';
+
+ALTER ROLE app_django WITH PASSWORD 'Dj4ng0_Ferr_App2026!Xk9';
+
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+UPDATE empleado
+SET password = crypt('Password123!', gen_salt('bf', 10));
+
+UPDATE cliente
+SET password = crypt('Password123!', gen_salt('bf', 10));
