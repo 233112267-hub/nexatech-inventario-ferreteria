@@ -379,3 +379,152 @@ def actualizar_empleado_view(request, empcve):
             "estatus": empleado.estatus,
         }
     }, status=200)
+
+@csrf_exempt
+@require_http_methods(["PUT", "PATCH", "DELETE"])
+@requiere_rol("Administrador")
+def actualizar_cliente_view(request, clicve):
+    try:
+        cliente = Cliente.objects.get(clicve=clicve)
+    except Cliente.DoesNotExist:
+        return JsonResponse({"error": "Cliente no encontrado"}, status=404)
+
+    if request.method == "DELETE":
+        if cliente.estatus == "inactivo":
+            return JsonResponse({"error": "El cliente ya está inactivo"}, status=400)
+        cliente.estatus = "inactivo"
+        cliente.save()
+        return JsonResponse({
+            "mensaje": "Cliente eliminado correctamente",
+            "cliente": {"clicve": cliente.clicve, "nombre": cliente.nombre, "estatus": cliente.estatus}
+        }, status=200)
+
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "JSON inválido"}, status=400)
+
+    campos_permitidos = [
+        "nombre", "apellidopaterno", "apellidomaterno",
+        "telefono", "membresia", "estatus"
+    ]
+
+    if request.method == "PUT":
+        faltantes = [c for c in ("nombre", "apellidopaterno", "username", "email") if not data.get(c)]
+        if faltantes:
+            return JsonResponse(
+                {"error": f"PUT requiere todos los campos obligatorios. Faltan: {', '.join(faltantes)}"},
+                status=400
+            )
+
+    # Validar membresía si viene incluida
+    if "membresia" in data:
+        if data["membresia"] not in ("basica", "premium"):
+            return JsonResponse({"error": "Membresía inválida. Use basica o premium"}, status=400)
+
+    # Validar username si viene incluido (evitar duplicados con otro cliente)
+    if "username" in data:
+        if Cliente.objects.exclude(clicve=clicve).filter(username=data["username"]).exists():
+            return JsonResponse({"error": "El username ya está en uso"}, status=400)
+        cliente.username = data["username"]
+
+    # Validar email si viene incluido (evitar duplicados con otro cliente)
+    if "email" in data:
+        if Cliente.objects.exclude(clicve=clicve).filter(email=data["email"]).exists():
+            return JsonResponse({"error": "El email ya está en uso"}, status=400)
+        cliente.email = data["email"]
+
+    # Password: solo si lo mandan, se hashea antes de guardar
+    if "password" in data and data["password"]:
+        cliente.password = bcrypt.hashpw(data["password"].encode("utf-8"), bcrypt.gensalt(10)).decode("utf-8")
+
+    # Resto de los campos simples
+    for campo in campos_permitidos:
+        if campo in data:
+            setattr(cliente, campo, data[campo])
+
+    cliente.save()
+
+    return JsonResponse({
+        "mensaje": "Cliente actualizado correctamente",
+        "cliente": {
+            "clicve": cliente.clicve,
+            "nombre": cliente.nombre,
+            "username": cliente.username,
+            "membresia": cliente.membresia,
+            "estatus": cliente.estatus,
+        }
+    }, status=200)
+
+@require_GET
+@requiere_rol("Administrador")
+def listar_clientes_view(request):
+    clientes = Cliente.objects.filter(estatus="activo")
+
+    data = [
+        {
+            "clicve": cliente.clicve,
+            "nombre": cliente.nombre,
+            "apellidopaterno": cliente.apellidopaterno,
+            "apellidomaterno": cliente.apellidomaterno,
+            "telefono": cliente.telefono,
+            "username": cliente.username,
+            "email": cliente.email,
+            "membresia": cliente.membresia,
+            "estatus": cliente.estatus,
+        }
+        for cliente in clientes
+    ]
+
+    return JsonResponse({"clientes": data}, status=200)
+
+@csrf_exempt
+@require_POST
+@requiere_rol("Administrador")
+def crear_cliente_view(request):
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "JSON inválido"}, status=400)
+
+    nombre = data.get("nombre")
+    apellidopaterno = data.get("apellidopaterno")
+    username = data.get("username")
+    email = data.get("email")
+    password = data.get("password")
+
+    if not all([nombre, apellidopaterno, username, email, password]):
+        return JsonResponse({"error": "Faltan campos obligatorios"}, status=400)
+
+    membresia = data.get("membresia", "basica")
+    if membresia not in ("basica", "premium"):
+        return JsonResponse({"error": "Membresía inválida. Use basica o premium"}, status=400)
+
+    if Cliente.objects.filter(username=username).exists():
+        return JsonResponse({"error": "El username ya está en uso"}, status=400)
+
+    if Cliente.objects.filter(email=email).exists():
+        return JsonResponse({"error": "El email ya está en uso"}, status=400)
+
+    password_hash = bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt(10)).decode("utf-8")
+
+    cliente = Cliente.objects.create(
+        nombre=nombre,
+        apellidopaterno=apellidopaterno,
+        apellidomaterno=data.get("apellidomaterno"),
+        telefono=data.get("telefono"),
+        username=username,
+        email=email,
+        password=password_hash,
+        membresia=membresia,
+    )
+
+    return JsonResponse({
+        "mensaje": "Cliente creado correctamente",
+        "cliente": {
+            "clicve": cliente.clicve,
+            "nombre": cliente.nombre,
+            "username": cliente.username,
+            "membresia": cliente.membresia,
+        }
+    }, status=201)

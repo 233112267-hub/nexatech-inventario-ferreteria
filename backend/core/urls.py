@@ -15,4 +15,9 @@ urlpatterns = [
     # put y delete productos y empleados
     path('api/productos/<int:procve>/', views.actualizar_producto_view),
     path('api/empleados/<int:empcve>/', views.actualizar_empleado_view),
+
+        # Clientes
+    path('api/clientes/crear/', views.crear_cliente_view),
+    path('api/clientes/listar/', views.listar_clientes_view),
+    path('api/clientes/<int:clicve>/', views.actualizar_cliente_view),
 ]
