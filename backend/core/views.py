@@ -528,3 +528,85 @@ def crear_cliente_view(request):
             "membresia": cliente.membresia,
         }
     }, status=201)
+
+@csrf_exempt
+@require_POST
+@requiere_rol("Administrador")
+def crear_categoria_view(request):
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "JSON inválido"}, status=400)
+
+    nombre = data.get("nombre")
+    if not nombre:
+        return JsonResponse({"error": "El nombre es obligatorio"}, status=400)
+
+    if Categoria.objects.filter(nombre__iexact=nombre).exists():
+        return JsonResponse({"error": "Ya existe una categoría con ese nombre"}, status=400)
+
+    categoria = Categoria.objects.create(
+        nombre=nombre,
+        descripcion=data.get("descripcion"),
+    )
+
+    return JsonResponse({
+        "mensaje": "Categoría creada correctamente",
+        "categoria": {"catcve": categoria.catcve, "nombre": categoria.nombre}
+    }, status=201)
+
+
+@require_GET
+@requiere_rol("Administrador", "Vendedor")
+def listar_categorias_view(request):
+    categorias = Categoria.objects.filter(estatus="activo")
+
+    data = [
+        {"catcve": c.catcve, "nombre": c.nombre, "descripcion": c.descripcion}
+        for c in categorias
+    ]
+
+    return JsonResponse({"categorias": data}, status=200)
+
+
+@csrf_exempt
+@require_http_methods(["PUT", "PATCH", "DELETE"])
+@requiere_rol("Administrador")
+def actualizar_categoria_view(request, catcve):
+    try:
+        categoria = Categoria.objects.get(catcve=catcve)
+    except Categoria.DoesNotExist:
+        return JsonResponse({"error": "Categoría no encontrada"}, status=404)
+
+    if request.method == "DELETE":
+        if categoria.estatus == "inactivo":
+            return JsonResponse({"error": "La categoría ya está inactiva"}, status=400)
+        categoria.estatus = "inactivo"
+        categoria.save()
+        return JsonResponse({
+            "mensaje": "Categoría eliminada correctamente (los productos existentes no se ven afectados)",
+            "categoria": {"catcve": categoria.catcve, "nombre": categoria.nombre, "estatus": categoria.estatus}
+        }, status=200)
+
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "JSON inválido"}, status=400)
+
+    if request.method == "PUT" and not data.get("nombre"):
+        return JsonResponse({"error": "PUT requiere el campo nombre"}, status=400)
+
+    if "nombre" in data:
+        if Categoria.objects.exclude(catcve=catcve).filter(nombre__iexact=data["nombre"]).exists():
+            return JsonResponse({"error": "Ya existe otra categoría con ese nombre"}, status=400)
+        categoria.nombre = data["nombre"]
+
+    if "descripcion" in data:
+        categoria.descripcion = data["descripcion"]
+
+    categoria.save()
+
+    return JsonResponse({
+        "mensaje": "Categoría actualizada correctamente",
+        "categoria": {"catcve": categoria.catcve, "nombre": categoria.nombre}
+    }, status=200)

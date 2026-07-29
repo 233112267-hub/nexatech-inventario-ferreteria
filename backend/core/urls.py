@@ -16,6 +16,11 @@ urlpatterns = [
     path('api/productos/<int:procve>/', views.actualizar_producto_view),
     path('api/empleados/<int:empcve>/', views.actualizar_empleado_view),
 
+        # Categorías
+    path('api/categorias/crear/', views.crear_categoria_view),
+    path('api/categorias/listar/', views.listar_categorias_view),
+    path('api/categorias/<int:catcve>/', views.actualizar_categoria_view),
+
         # Clientes
     path('api/clientes/crear/', views.crear_cliente_view),
     path('api/clientes/listar/', views.listar_clientes_view),
