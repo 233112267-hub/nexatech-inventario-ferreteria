@@ -760,3 +760,117 @@ def listar_ventas_view(request):
     ]
 
     return JsonResponse({"ventas": data}, status=200)
+
+import random
+import string
+from datetime import timedelta
+from datetime import datetime, timedelta
+from django.core.mail import send_mail
+from django.template.loader import render_to_string
+from django.utils.html import strip_tags
+
+
+def _buscar_usuario_por_email(email):
+    """Busca en empleado y luego en cliente. Regresa (usuario, tipo) o (None, None)."""
+    try:
+        return Empleado.objects.get(email=email), "empleado"
+    except Empleado.DoesNotExist:
+        pass
+    try:
+        return Cliente.objects.get(email=email), "cliente"
+    except Cliente.DoesNotExist:
+        return None, None
+
+
+@csrf_exempt
+@require_POST
+def forgot_password_view(request):
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({"ok": False, "message": "JSON inválido"}, status=400)
+
+    correo = data.get("correo", "").strip()
+    if not correo:
+        return JsonResponse({"ok": False, "message": "El correo es obligatorio"}, status=400)
+
+    usuario, tipo = _buscar_usuario_por_email(correo)
+
+    # Por seguridad, no revelamos si el correo existe o no.
+    # Siempre respondemos "ok" aunque no exista, pero solo mandamos
+    # el correo real si sí encontramos al usuario.
+    if usuario:
+        codigo = "".join(random.choices(string.digits, k=6))
+        usuario.reset_token = codigo
+        usuario.reset_token_expira = datetime.utcnow() + timedelta(minutes=10)
+        usuario.save()
+
+        html_content = render_to_string("emails/codigo_recuperacion.html", {
+            "nombre": usuario.nombre,
+            "codigo": codigo,
+        })
+        texto_plano = strip_tags(html_content)
+
+        send_mail(
+            subject="Código de recuperación — Ferretería",
+            message=texto_plano,
+            from_email=None,  # usa DEFAULT_FROM_EMAIL
+            recipient_list=[correo],
+            html_message=html_content,
+            fail_silently=False,
+        )
+
+    return JsonResponse({"ok": True})
+
+
+@csrf_exempt
+@require_POST
+def verify_code_view(request):
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({"ok": False, "message": "JSON inválido"}, status=400)
+
+    correo = data.get("correo", "").strip()
+    codigo = data.get("codigo", "").strip()
+
+    usuario, tipo = _buscar_usuario_por_email(correo)
+
+    if not usuario or usuario.reset_token != codigo:
+        return JsonResponse({"ok": False, "message": "Código incorrecto o expirado."})
+
+    if usuario.reset_token_expira < datetime.utcnow():
+        return JsonResponse({"ok": False, "message": "El código ha expirado."})
+
+    return JsonResponse({"ok": True})
+
+
+@csrf_exempt
+@require_POST
+def reset_password_view(request):
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({"ok": False, "message": "JSON inválido"}, status=400)
+
+    correo = data.get("correo", "").strip()
+    codigo = data.get("codigo", "").strip()
+    nueva_password = data.get("nueva_password", "")
+
+    if len(nueva_password) < 6:
+        return JsonResponse({"ok": False, "message": "La contraseña debe tener al menos 6 caracteres"})
+
+    usuario, tipo = _buscar_usuario_por_email(correo)
+
+    if not usuario or usuario.reset_token != codigo:
+        return JsonResponse({"ok": False, "message": "Código inválido."})
+
+    if usuario.reset_token_expira < datetime.utcnow():
+        return JsonResponse({"ok": False, "message": "El código ha expirado, solicita uno nuevo."})
+
+    usuario.password = bcrypt.hashpw(nueva_password.encode("utf-8"), bcrypt.gensalt(10)).decode("utf-8")
+    usuario.reset_token = None
+    usuario.reset_token_expira = None
+    usuario.save()
+
+    return JsonResponse({"ok": True})

@@ -227,18 +227,25 @@ btn.addEventListener('click', async () => {
   btn.querySelector('.spinner-border').classList.remove('d-none');
   btn.disabled = true;
   try {
-    const res = await fetch(`${API}/auth/login`, {
+    // Nota: este login es para personal (empleados). Si algún día
+    // agregas login de clientes en esta misma pantalla, necesitarás
+    // un selector de "tipo" como hicimos en la primera versión.
+    const res = await fetch(`${API}/auth/login/`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username: user, password: pass })
+      body: JSON.stringify({ tipo: 'empleado', username: user, password: pass })
     });
     const data = await res.json();
-    if (data.ok) {
+
+    if (res.ok) {
+      // Login exitoso: Django devuelve { token, tipo, rol }
       localStorage.setItem('token', data.token);
-      localStorage.setItem('user', JSON.stringify(data.user));
+      localStorage.setItem('tipo', data.tipo);
+      localStorage.setItem('rol', data.rol);
       window.location.href = 'dashboard.html';
     } else {
-      errorMsg.textContent = data.message || data.detail || 'Credenciales incorrectas.';
+      // Error: Django devuelve { error: "..." }
+      errorMsg.textContent = data.error || 'Credenciales incorrectas.';
       errorMsg.classList.remove('d-none');
     }
   } catch (e) {
@@ -355,7 +362,7 @@ document.getElementById('btnVerifyCode').addEventListener('click', async () => {
       fpShowError('fpErrorCode', data.message || 'Código incorrecto o expirado.');
     }
   } catch (e) {
-    fpShowError('fpErrorCode', '⚠ No se pudo conectar con el servidor.');
+    fpShowError('fpErrorCode', ' No se pudo conectar con el servidor.');
   } finally {
     fpSetLoading(btnVerify, false);
   }

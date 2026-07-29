@@ -28,4 +28,9 @@ urlpatterns = [
 
     path('api/ventas/crear/', views.crear_venta_view),
     path('api/ventas/listar/', views.listar_ventas_view),
+
+    path('api/auth/forgot-password/', views.forgot_password_view),
+    path('api/auth/verify-code/', views.verify_code_view),
+    path('api/auth/reset-password/', views.reset_password_view),
+
 ]
