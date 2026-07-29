@@ -9,7 +9,9 @@ from django.views.decorators.http import require_POST
 from django.views.decorators.http import require_GET
 from django.views.decorators.http import require_http_methods
 from django.views.decorators.csrf import csrf_exempt
+from django.db import transaction, DatabaseError
 from .models import Empleado, Cliente
+from .models import Empleado, Cliente, Producto, Categoria, Surcusal, Venta, DetalleVenta
 from .models import Empleado, Cliente, Producto, Categoria, Surcusal
 from .jwt_utils import generar_jwt
 
@@ -610,3 +612,151 @@ def actualizar_categoria_view(request, catcve):
         "mensaje": "Categoría actualizada correctamente",
         "categoria": {"catcve": categoria.catcve, "nombre": categoria.nombre}
     }, status=200)
+
+@csrf_exempt
+@require_POST
+@requiere_rol("Administrador", "Vendedor")
+def crear_venta_view(request):
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "JSON inválido"}, status=400)
+
+    empcve = data.get("empcve")
+    clicve = data.get("clicve")  # opcional, venta puede ser sin cliente registrado
+    items = data.get("items")    # lista de {"procve": X, "cantidad": Y}
+
+    if not empcve or not items or not isinstance(items, list) or len(items) == 0:
+        return JsonResponse({"error": "Faltan campos obligatorios: empcve, items (lista no vacía)"}, status=400)
+
+    try:
+        empleado = Empleado.objects.get(empcve=empcve)
+    except Empleado.DoesNotExist:
+        return JsonResponse({"error": "El empleado indicado no existe"}, status=400)
+
+    cliente = None
+    if clicve:
+        try:
+            cliente = Cliente.objects.get(clicve=clicve)
+        except Cliente.DoesNotExist:
+            return JsonResponse({"error": "El cliente indicado no existe"}, status=400)
+
+    tipo_entrega = data.get("tipo_entrega", "mostrador")
+    if tipo_entrega not in ("mostrador", "domicilio"):
+        return JsonResponse({"error": "tipo_entrega inválido. Use mostrador o domicilio"}, status=400)
+
+    if tipo_entrega == "domicilio" and not data.get("direccion_entrega"):
+        return JsonResponse({"error": "domicilio requiere direccion_entrega"}, status=400)
+
+    # Validar cada item antes de tocar la base de datos
+    productos_validados = []
+    for item in items:
+        procve = item.get("procve")
+        cantidad = item.get("cantidad")
+
+        if not procve or not cantidad or cantidad <= 0:
+            return JsonResponse({"error": "Cada item requiere procve y cantidad > 0"}, status=400)
+
+        try:
+            producto = Producto.objects.get(procve=procve, estatus="activo")
+        except Producto.DoesNotExist:
+            return JsonResponse({"error": f"El producto {procve} no existe o está inactivo"}, status=400)
+
+        productos_validados.append((producto, cantidad))
+
+    try:
+        with transaction.atomic():
+            venta = Venta.objects.create(
+                empcve=empleado,
+                clicve=cliente,
+                descripcion=data.get("descripcion"),
+                metodo_pago=data.get("metodo_pago", "efectivo"),
+                tipo_entrega=tipo_entrega,
+                direccion_entrega=data.get("direccion_entrega"),
+                codigo_postal=data.get("codigo_postal"),
+            )
+
+            for producto, cantidad in productos_validados:
+                subtotal_linea = producto.precio * cantidad
+                # Este INSERT dispara los triggers de PostgreSQL:
+                # 1) trg_detalle_venta_stock -> CALL sp_disminuir_stock (puede lanzar excepción)
+                # 2) trg_actualizar_total_venta -> recalcula venta.total y venta.subtotal
+                DetalleVenta.objects.create(
+                    procve=producto,
+                    vencve=venta,
+                    cantidad=cantidad,
+                    precio=producto.precio,
+                    subtotal=subtotal_linea,
+                )
+
+    except DatabaseError as e:
+        # Aquí llega el RAISE EXCEPTION de sp_disminuir_stock cuando el stock es insuficiente
+        mensaje = str(e).split("\n")[0]  # primera línea, evita el traceback completo de SQL
+        return JsonResponse({"error": f"No se pudo completar la venta: {mensaje}"}, status=400)
+
+    venta.refresh_from_db()
+
+    detalles = DetalleVenta.objects.filter(vencve=venta)
+    detalles_data = [
+        {
+            "detcve": d.detcve,
+            "producto": d.procve.nombre,
+            "cantidad": d.cantidad,
+            "precio": str(d.precio),
+            "subtotal": str(d.subtotal),
+        }
+        for d in detalles
+    ]
+
+    return JsonResponse({
+        "mensaje": "Venta creada correctamente",
+        "venta": {
+            "vencve": venta.vencve,
+            "total": str(venta.total),
+            "subtotal": str(venta.subtotal),
+            "empleado": empleado.nombre,
+            "cliente": cliente.nombre if cliente else None,
+            "detalles": detalles_data,
+        }
+    }, status=201)
+@require_GET
+@requiere_rol("Administrador", "Vendedor")
+def listar_ventas_view(request):
+    ventas = Venta.objects.filter(estatus="completada").select_related("empcve", "clicve")
+
+    data = [
+        {
+            "vencve": v.vencve,
+            "total": str(v.total),
+            "subtotal": str(v.subtotal),
+            "empleado": v.empcve.nombre,
+            "cliente": v.clicve.nombre if v.clicve else None,
+            "metodo_pago": v.metodo_pago,
+            "tipo_entrega": v.tipo_entrega,
+            "fecha": v.fecha,
+        }
+        for v in ventas
+    ]
+
+    return JsonResponse({"ventas": data}, status=200)
+
+@require_GET
+@requiere_rol("Administrador", "Vendedor")
+def listar_ventas_view(request):
+    ventas = Venta.objects.filter(estatus="completada").select_related("empcve", "clicve")
+
+    data = [
+        {
+            "vencve": v.vencve,
+            "total": str(v.total),
+            "subtotal": str(v.subtotal),
+            "empleado": v.empcve.nombre,
+            "cliente": v.clicve.nombre if v.clicve else None,
+            "metodo_pago": v.metodo_pago,
+            "tipo_entrega": v.tipo_entrega,
+            "fecha": v.fecha,
+        }
+        for v in ventas
+    ]
+
+    return JsonResponse({"ventas": data}, status=200)

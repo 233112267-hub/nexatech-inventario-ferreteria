@@ -25,4 +25,7 @@ urlpatterns = [
     path('api/clientes/crear/', views.crear_cliente_view),
     path('api/clientes/listar/', views.listar_clientes_view),
     path('api/clientes/<int:clicve>/', views.actualizar_cliente_view),
+
+    path('api/ventas/crear/', views.crear_venta_view),
+    path('api/ventas/listar/', views.listar_ventas_view),
 ]

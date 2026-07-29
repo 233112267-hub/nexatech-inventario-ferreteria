@@ -80,3 +80,37 @@ class Producto(models.Model):
         managed = False
         db_table = 'producto'
 
+class Venta(models.Model):
+    vencve = models.AutoField(primary_key=True)
+    empcve = models.ForeignKey(Empleado, on_delete=models.DO_NOTHING, db_column='empcve')
+    clicve = models.ForeignKey(Cliente, on_delete=models.DO_NOTHING, db_column='clicve', blank=True, null=True)
+    total = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    subtotal = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    descripcion = models.CharField(max_length=150, blank=True, null=True)
+    estatus = models.CharField(max_length=20, default='completada')
+    metodo_pago = models.CharField(max_length=20, default='efectivo')
+    tipo_entrega = models.CharField(max_length=20, default='mostrador')
+    direccion_entrega = models.CharField(max_length=200, blank=True, null=True)
+    codigo_postal = models.CharField(max_length=10, blank=True, null=True)
+    fecha = models.DateField(auto_now_add=True)
+
+    class Meta:
+        managed = False
+        db_table = 'venta'
+
+
+class DetalleVenta(models.Model):
+    detcve = models.AutoField(primary_key=True)
+    procve = models.ForeignKey(Producto, on_delete=models.DO_NOTHING, db_column='procve')
+    vencve = models.ForeignKey(Venta, on_delete=models.DO_NOTHING, db_column='vencve')
+    fecha = models.DateField(auto_now_add=True)
+    cantidad = models.IntegerField()
+    precio = models.DecimalField(max_digits=10, decimal_places=2)
+    subtotal = models.DecimalField(max_digits=10, decimal_places=2)
+    descuento = models.DecimalField(max_digits=10, decimal_places=2, blank=True, null=True, default=0)
+    estatus = models.CharField(max_length=20, default='activo')
+    modalidad = models.CharField(max_length=20, default='normal')
+
+    class Meta:
+        managed = False
+        db_table = 'detalle_venta'
