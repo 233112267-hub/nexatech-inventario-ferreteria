@@ -6,6 +6,8 @@ import json
 import bcrypt
 from django.http import JsonResponse
 from django.views.decorators.http import require_POST
+from django.views.decorators.http import require_GET
+from django.views.decorators.http import require_http_methods
 from django.views.decorators.csrf import csrf_exempt
 from .models import Empleado, Cliente
 from .models import Empleado, Cliente, Producto, Categoria, Surcusal
@@ -91,6 +93,11 @@ def crear_producto_view(request):
     except Categoria.DoesNotExist:
         return JsonResponse({"error": "La categoría indicada no existe"}, status=400)
 
+    try:
+        precio = float(precio)
+    except (TypeError, ValueError):
+        return JsonResponse({"error": "El precio debe ser un número válido"}, status=400)
+
     if float(precio) <= 0:
         return JsonResponse({"error": "El precio debe ser mayor a 0"}, status=400)
 
@@ -173,3 +180,202 @@ def crear_empleado_view(request):
             "rol": empleado.rol,
         }
     }, status=201)
+
+@require_GET
+@requiere_rol("Administrador", "Vendedor")
+def listar_productos_view(request):
+    productos = Producto.objects.filter(estatus="activo").select_related("catcve")
+
+    data = [
+        {
+            "procve": p.procve,
+            "nombre": p.nombre,
+            "precio": str(p.precio),
+            "descripcion": p.descripcion,
+            "modelo": p.modelo,
+            "marca": p.marca,
+            "color": p.color,
+            "categoria": p.catcve.nombre,
+        }
+        for p in productos
+    ]
+
+    return JsonResponse({"productos": data}, status=200)
+
+@require_GET
+@requiere_rol("Administrador")
+def listar_empleados_view(request):
+    empleados = Empleado.objects.filter(estatus="activo").select_related("surcve")
+
+    data = [
+        {
+            "empcve": e.empcve,
+            "nombre": e.nombre,
+            "apellidopaterno": e.apellidopaterno,
+            "apellidomaterno": e.apellidomaterno,
+            "rol": e.rol,
+            "username": e.username,
+            "email": e.email,
+            "sucursal": e.surcve.direccion,
+        }
+        for e in empleados
+    ]
+
+    return JsonResponse({"empleados": data}, status=200)
+@csrf_exempt
+@require_http_methods(["PUT", "PATCH", "DELETE"])
+@requiere_rol("Administrador")
+def actualizar_producto_view(request, procve):
+    try:
+        producto = Producto.objects.get(procve=procve)
+    except Producto.DoesNotExist:
+        return JsonResponse({"error": "Producto no encontrado"}, status=404)
+
+    if request.method == "DELETE":
+        if producto.estatus == "inactivo":
+            return JsonResponse({"error": "El producto ya está inactivo"}, status=400)
+        producto.estatus = "inactivo"
+        producto.save()
+        return JsonResponse({
+            "mensaje": "Producto eliminado correctamente",
+            "producto": {"procve": producto.procve, "nombre": producto.nombre, "estatus": producto.estatus}
+        }, status=200)
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "JSON inválido"}, status=400)
+
+    campos_permitidos = [
+        "nombre", "precio", "descripcion", "modelo",
+        "marca", "color", "informacion_adicional", "catcve", "estatus"
+    ]
+
+    if request.method == "PUT":
+        # PUT: se espera que manden TODOS los campos obligatorios
+        faltantes = [c for c in ("catcve", "nombre", "precio") if data.get(c) is None]
+        if faltantes:
+            return JsonResponse(
+                {"error": f"PUT requiere todos los campos obligatorios. Faltan: {', '.join(faltantes)}"},
+                status=400
+            )
+
+    # Validar catcve si viene incluido (en PUT siempre, en PATCH si el usuario lo manda)
+    if "catcve" in data:
+        try:
+            categoria = Categoria.objects.get(catcve=data["catcve"])
+            producto.catcve = categoria
+        except Categoria.DoesNotExist:
+            return JsonResponse({"error": "La categoría indicada no existe"}, status=400)
+
+    # Validar precio si viene incluido
+    if "precio" in data:
+        try:
+            precio = float(data["precio"])
+        except (TypeError, ValueError):
+            return JsonResponse({"error": "El precio debe ser un número válido"}, status=400)
+        if precio <= 0:
+            return JsonResponse({"error": "El precio debe ser mayor a 0"}, status=400)
+        producto.precio = precio
+
+    # Resto de los campos: se actualizan solo si vienen en el body
+    for campo in campos_permitidos:
+        if campo in data and campo not in ("catcve", "precio"):
+            setattr(producto, campo, data[campo])
+
+    producto.save()
+
+    return JsonResponse({
+        "mensaje": "Producto actualizado correctamente",
+        "producto": {
+            "procve": producto.procve,
+            "nombre": producto.nombre,
+            "precio": str(producto.precio),
+            "catcve": producto.catcve.catcve,
+            "estatus": producto.estatus,
+        }
+    }, status=200)
+
+@csrf_exempt
+@require_http_methods(["PUT", "PATCH", "DELETE"])
+@requiere_rol("Administrador")
+def actualizar_empleado_view(request, empcve):
+    try:
+        empleado = Empleado.objects.get(empcve=empcve)
+    except Empleado.DoesNotExist:
+        return JsonResponse({"error": "Empleado no encontrado"}, status=404)
+
+    if request.method == "DELETE":
+        if empleado.estatus == "inactivo":
+            return JsonResponse({"error": "El empleado ya está inactivo"}, status=400)
+        empleado.estatus = "inactivo"
+        empleado.save()
+        return JsonResponse({
+            "mensaje": "Empleado eliminado correctamente",
+            "empleado": {"empcve": empleado.empcve, "nombre": empleado.nombre, "estatus": empleado.estatus}
+        }, status=200)
+
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "JSON inválido"}, status=400)
+
+    campos_permitidos = [
+        "nombre", "apellidopaterno", "apellidomaterno",
+        "rol", "surcve", "estatus"
+    ]
+
+    if request.method == "PUT":
+        faltantes = [c for c in ("nombre", "apellidopaterno", "rol", "surcve") if not data.get(c)]
+        if faltantes:
+            return JsonResponse(
+                {"error": f"PUT requiere todos los campos obligatorios. Faltan: {', '.join(faltantes)}"},
+                status=400
+            )
+
+    # Validar sucursal si viene incluida
+    if "surcve" in data:
+        try:
+            sucursal = Surcusal.objects.get(surcve=data["surcve"])
+            empleado.surcve = sucursal
+        except Surcusal.DoesNotExist:
+            return JsonResponse({"error": "La sucursal indicada no existe"}, status=400)
+
+    # Validar rol si viene incluido
+    if "rol" in data:
+        if data["rol"] not in ("Administrador", "Vendedor"):
+            return JsonResponse({"error": "Rol inválido. Use Administrador o Vendedor"}, status=400)
+        empleado.rol = data["rol"]
+
+    # Validar username si viene incluido (evitar duplicados con otro empleado)
+    if "username" in data:
+        if Empleado.objects.exclude(empcve=empcve).filter(username=data["username"]).exists():
+            return JsonResponse({"error": "El username ya está en uso"}, status=400)
+        empleado.username = data["username"]
+
+    # Validar email si viene incluido (evitar duplicados con otro empleado)
+    if "email" in data:
+        if Empleado.objects.exclude(empcve=empcve).filter(email=data["email"]).exists():
+            return JsonResponse({"error": "El email ya está en uso"}, status=400)
+        empleado.email = data["email"]
+
+    # Password: solo si lo mandan, se hashea antes de guardar
+    if "password" in data and data["password"]:
+        empleado.password = bcrypt.hashpw(data["password"].encode("utf-8"), bcrypt.gensalt(10)).decode("utf-8")
+
+    # Resto de los campos simples
+    for campo in campos_permitidos:
+        if campo in data and campo not in ("surcve", "rol"):
+            setattr(empleado, campo, data[campo])
+
+    empleado.save()
+
+    return JsonResponse({
+        "mensaje": "Empleado actualizado correctamente",
+        "empleado": {
+            "empcve": empleado.empcve,
+            "nombre": empleado.nombre,
+            "username": empleado.username,
+            "rol": empleado.rol,
+            "estatus": empleado.estatus,
+        }
+    }, status=200)
