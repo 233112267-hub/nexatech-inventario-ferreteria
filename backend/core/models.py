@@ -114,3 +114,18 @@ class DetalleVenta(models.Model):
     class Meta:
         managed = False
         db_table = 'detalle_venta'
+
+#Dashboard stocks
+class Stock(models.Model):
+    stoccve = models.AutoField(primary_key=True)
+    procve = models.ForeignKey(Producto, on_delete=models.DO_NOTHING, db_column='procve')
+    stock_actual = models.IntegerField(default=0)
+    stock_minimo = models.IntegerField(default=5)
+    fecha = models.DateField(auto_now_add=True)
+    estatus = models.CharField(max_length=30, default='normal')
+    descripcion = models.CharField(max_length=150, blank=True, null=True)
+
+    class Meta:
+        managed = False
+        db_table = 'stock'
+        

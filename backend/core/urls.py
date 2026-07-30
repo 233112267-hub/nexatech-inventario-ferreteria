@@ -33,4 +33,12 @@ urlpatterns = [
     path('api/auth/verify-code/', views.verify_code_view),
     path('api/auth/reset-password/', views.reset_password_view),
 
+    #Dasboard 6 points
+    path('api/dashboard/stats/', views.dashboard_stats_view),
+    path('api/dashboard/ventas-semana/', views.ventas_semana_view),
+    path('api/productos/stock-bajo/', views.stock_bajo_view),
+    path('api/ventas/', views.ventas_recientes_view),
+    path('api/alertas/', views.alertas_view),
+    path('api/categorias/', views.categorias_con_conteo_view),
+    path('api/productos/mas-vendidos/', views.productos_mas_vendidos_view),
 ]

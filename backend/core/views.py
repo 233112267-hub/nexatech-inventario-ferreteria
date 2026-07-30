@@ -14,7 +14,10 @@ from .models import Empleado, Cliente
 from .models import Empleado, Cliente, Producto, Categoria, Surcusal, Venta, DetalleVenta
 from .models import Empleado, Cliente, Producto, Categoria, Surcusal
 from .jwt_utils import generar_jwt
-
+#vista de modelo
+from django.db.models import Sum, Count, Q
+from datetime import date, timedelta
+from .models import Stock
 
 @csrf_exempt
 @require_POST
@@ -874,3 +877,128 @@ def reset_password_view(request):
     usuario.save()
 
     return JsonResponse({"ok": True})
+#stock bajo, ventas del mes, total de productos, total de usuarios
+#/dashboard/stats  las 4 tarjetas de arriba:
+@require_GET
+@requiere_rol("Administrador", "Vendedor")
+def dashboard_stats_view(request):
+    total_productos = Producto.objects.filter(estatus="activo").count()
+
+    hoy = date.today()
+    ventas_mes = Venta.objects.filter(estatus="completada", fecha__year=hoy.year, fecha__month=hoy.month)
+    ventas_mes_total = ventas_mes.aggregate(suma=Sum("total"))["suma"] or 0
+    ventas_mes_count = ventas_mes.count()
+
+    stock_bajo = Stock.objects.filter(estatus="alerta", stock_actual__gt=0).count()
+    agotados = Stock.objects.filter(stock_actual=0).count()
+
+    total_usuarios = Empleado.objects.filter(estatus="activo").count()
+
+    return JsonResponse({
+        "ok": True,
+        "data": {
+            "totalProductos": total_productos,
+            "ventasMes": float(ventas_mes_total),
+            "totalVentasMes": ventas_mes_count,
+            "alertasPendientes": stock_bajo + agotados,
+            "stockBajo": stock_bajo,
+            "agotados": agotados,
+            "totalUsuarios": total_usuarios,
+        }
+    })
+#/dashboard/ventas-semana la gráfica:
+@require_GET
+@requiere_rol("Administrador", "Vendedor")
+def ventas_semana_view(request):
+    hoy = date.today()
+    dias = [hoy - timedelta(days=i) for i in range(6, -1, -1)]
+    nombres_dias = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"]
+
+    data = []
+    for dia in dias:
+        total = Venta.objects.filter(fecha=dia, estatus="completada").aggregate(s=Sum("total"))["s"] or 0
+        data.append({"dia": nombres_dias[dia.weekday()], "total": float(total)})
+
+    return JsonResponse({"ok": True, "data": data})
+
+#/productos/stock-bajo — la barra de stock bajo:
+@require_GET
+@requiere_rol("Administrador", "Vendedor", "Almacenista")
+def stock_bajo_view(request):
+    stocks = Stock.objects.filter(estatus="alerta").select_related("procve").order_by("stock_actual")
+
+    data = [
+        {"nombre": s.procve.nombre, "stock": s.stock_actual, "stock_minimo": s.stock_minimo}
+        for s in stocks
+    ]
+    return JsonResponse({"ok": True, "data": data})
+
+#/ventas con ?limit= — tabla de ventas recientes:
+@require_GET
+@requiere_rol("Administrador", "Vendedor")
+def ventas_recientes_view(request):
+    limit = int(request.GET.get("limit", 10))
+    ventas = Venta.objects.select_related("clicve").order_by("-vencve")[:limit]
+
+    data = [
+        {
+            "folio": f"V-{v.vencve:04d}",
+            "cliente": v.clicve.nombre if v.clicve else "Mostrador",
+            "total": float(v.total),
+            "estado": "Pagada" if v.estatus == "completada" else v.estatus.capitalize(),
+        }
+        for v in ventas
+    ]
+    return JsonResponse({"ok": True, "data": data})
+
+#/alertas con ?estado=Pendiente&limit= — lista de alertas:
+@require_GET
+@requiere_rol("Administrador", "Vendedor", "Almacenista")
+def alertas_view(request):
+    limit = int(request.GET.get("limit", 10))
+    stocks = Stock.objects.filter(estatus="alerta").select_related("procve").order_by("stock_actual")[:limit]
+
+    data = []
+    for s in stocks:
+        critica = s.stock_actual == 0
+        data.append({
+            "tipo": "Crítica" if critica else "Advertencia",
+            "nombre": "Sin stock" if critica else "Stock bajo",
+            "producto_nombre": s.procve.nombre,
+            "descripcion": f"Quedan {s.stock_actual} unidades (mínimo {s.stock_minimo})",
+        })
+    return JsonResponse({"ok": True, "data": data})
+
+# /categorias con conteo — para la dona de "Productos por categoría":
+@require_GET
+@requiere_rol("Administrador", "Vendedor", "Almacenista")
+def categorias_con_conteo_view(request):
+    categorias = Categoria.objects.filter(estatus="activo").annotate(
+        total_productos=Count("producto", filter=Q(producto__estatus="activo"))
+    )
+    data = [
+        {"catcve": c.catcve, "nombre": c.nombre, "total_productos": c.total_productos}
+        for c in categorias
+    ]
+    return JsonResponse({"ok": True, "data": data})
+
+# /productos/mas-vendidos/ — lista de productos más vendidos:
+@require_GET
+@requiere_rol("Administrador", "Vendedor")
+def productos_mas_vendidos_view(request):
+    limit = int(request.GET.get("limit", 6))
+
+    top = (
+        DetalleVenta.objects
+        .filter(estatus="activo")
+        .values("procve__nombre")
+        .annotate(total_vendido=Sum("cantidad"))
+        .order_by("-total_vendido")[:limit]
+    )
+
+    data = [
+        {"nombre": item["procve__nombre"], "total_vendido": item["total_vendido"]}
+        for item in top
+    ]
+
+    return JsonResponse({"ok": True, "data": data})
