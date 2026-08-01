@@ -178,16 +178,14 @@ async function genReport(nombre,tipo,fmt){
   if(recentReports.length>10)recentReports.pop();
   renderRecent();
 
-  let data;
-  if(tipo==='Inventario') data=await apiFetch('/productos?limit=200');
-  else if(tipo==='Ventas') data=await apiFetch('/ventas?limit=200');
-  else if(tipo==='Stock bajo') data=await apiFetch('/productos/stock-bajo');
-  else if(tipo==='Movimientos') data=await apiFetch('/movimientos?limit=200');
+  const TIPO_PARAM={Inventario:'inventario',Ventas:'ventas','Stock bajo':'stock-bajo',Movimientos:'movimientos'};
+  const data=await apiFetch('/reportes?tipo='+TIPO_PARAM[tipo]+'&limit=200');
   if(data&&data.ok) showToast(`Reporte generado: ${data.total??data.data?.length??0} registros`,'success');
+  else if(data&&!data.ok) showToast(data.message||'No se pudo generar el reporte','error');
 }
 
 async function loadResumenes(){
-  const stats=await apiFetch('/dashboard/stats');
+  const stats=await apiFetch('/reportes?tipo=resumen');
   if(!stats||!stats.ok) return;
   const s=stats.data;
   document.getElementById('inventarioResumen').innerHTML=`

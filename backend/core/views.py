@@ -9,7 +9,8 @@ from django.views.decorators.http import require_POST
 from django.views.decorators.http import require_GET
 from django.views.decorators.http import require_http_methods
 from django.views.decorators.csrf import csrf_exempt
-from django.db import transaction, DatabaseError
+from django.db import transaction, DatabaseError, connection
+from django.utils import timezone
 from .models import Empleado, Cliente
 from .models import Empleado, Cliente, Producto, Categoria, Surcusal, Venta, DetalleVenta
 from .models import Empleado, Cliente, Producto, Categoria, Surcusal
@@ -17,7 +18,7 @@ from .jwt_utils import generar_jwt
 #vista de modelo
 from django.db.models import Sum, Count, Q
 from datetime import date, timedelta
-from .models import Stock
+from .models import Stock, Alerta
 
 @csrf_exempt
 @require_POST
@@ -969,6 +970,108 @@ def alertas_view(request):
         })
     return JsonResponse({"ok": True, "data": data})
 
+
+# /alertas/<id>/notificar — envía el correo de aviso (API externa: Gmail SMTP
+# ya configurado en settings.py) y pasa la alerta a estado 'Notificada'.
+# Si ya fue notificada o resuelta, NO reenvía (evita duplicar avisos).
+@csrf_exempt
+@require_POST
+@requiere_rol("Administrador")
+def alerta_notificar_view(request, alertcve):
+    try:
+        alerta = Alerta.objects.select_related("procve").get(alertcve=alertcve)
+    except Alerta.DoesNotExist:
+        return JsonResponse({"ok": False, "message": "Alerta no encontrada"}, status=404)
+
+    if alerta.estado != "Pendiente":
+        return JsonResponse({
+            "ok": True,
+            "message": f"Esta alerta ya está en estado '{alerta.estado}'; no se reenvía la notificación."
+        })
+
+    destinatarios = list(
+        Empleado.objects.filter(rol="Administrador", estatus="activo").values_list("email", flat=True)
+    )
+    if not destinatarios:
+        return JsonResponse({"ok": False, "message": "No hay administradores activos con correo registrado"}, status=400)
+
+    asunto = f"[Ferretería] Alerta de stock — {alerta.procve.nombre}"
+    cuerpo = (
+        f"Producto: {alerta.procve.nombre}\n"
+        f"Tipo de alerta: {alerta.tipo}\n"
+        f"Detalle: {alerta.descripcion}\n"
+    )
+
+    try:
+        send_mail(
+            subject=asunto,
+            message=cuerpo,
+            from_email=None,  # usa DEFAULT_FROM_EMAIL
+            recipient_list=destinatarios,
+            fail_silently=False,
+        )
+    except Exception as e:
+        return JsonResponse({"ok": False, "message": f"No se pudo enviar el correo: {e}"}, status=502)
+
+    alerta.estado = "Notificada"
+    alerta.fecha_notificacion = timezone.now()
+    alerta.save()
+
+    return JsonResponse({"ok": True, "message": "Notificación enviada correctamente"})
+
+
+# /alertas/<id>/resolver — reabastece el producto (sp_abastecer_stock, ya
+# existente en la BD) y pasa la alerta a 'Resuelta'. Si no se manda
+# "cantidad" en el body, reabastece justo lo necesario para salir del
+# mínimo de stock.
+@csrf_exempt
+@require_http_methods(["PATCH"])
+@requiere_rol("Administrador")
+def alerta_resolver_view(request, alertcve):
+    try:
+        alerta = Alerta.objects.select_related("procve").get(alertcve=alertcve)
+    except Alerta.DoesNotExist:
+        return JsonResponse({"ok": False, "message": "Alerta no encontrada"}, status=404)
+
+    if alerta.estado == "Resuelta":
+        return JsonResponse({"ok": True, "message": "Esta alerta ya estaba resuelta"})
+
+    try:
+        body = json.loads(request.body) if request.body else {}
+    except json.JSONDecodeError:
+        body = {}
+
+    try:
+        stock = Stock.objects.get(procve=alerta.procve)
+    except Stock.DoesNotExist:
+        return JsonResponse({"ok": False, "message": "No existe registro de stock para este producto"}, status=400)
+
+    cantidad = body.get("cantidad")
+    if cantidad is None:
+        cantidad = max(stock.stock_minimo - stock.stock_actual, 1)
+    try:
+        cantidad = int(cantidad)
+        if cantidad <= 0:
+            raise ValueError
+    except (TypeError, ValueError):
+        return JsonResponse({"ok": False, "message": "cantidad debe ser un entero mayor a 0"}, status=400)
+
+    with connection.cursor() as cursor:
+        cursor.execute("CALL sp_abastecer_stock(%s, %s)", [alerta.procve_id, cantidad])
+
+    alerta.estado = "Resuelta"
+    alerta.fecha_resolucion = timezone.now()
+    alerta.save()
+
+    stock.refresh_from_db()
+
+    return JsonResponse({
+        "ok": True,
+        "message": "Alerta resuelta y stock reabastecido",
+        "cantidad_reabastecida": cantidad,
+        "stock_actual": stock.stock_actual,
+    })
+
 # /categorias con conteo — para la dona de "Productos por categoría":
 @csrf_exempt
 @require_http_methods(["GET", "POST"])
@@ -1318,3 +1421,183 @@ def producto_ui_detail_view(request, procve):
         stock.save()
 
     return JsonResponse({"ok": True})
+
+# ── Reportes (reportes.html) ──────────────────────────────────
+# Endpoint dedicado y EXCLUSIVO de Administrador. No reutiliza
+# /productos, /ventas ni /dashboard/stats a propósito: esos endpoints
+# permiten Vendedor porque los necesita para productos.html/ventas.html,
+# y reutilizarlos aquí habría dejado un hueco (un Vendedor podría pedir
+# "reportes" llamando esas rutas compartidas directamente). Este endpoint
+# corre la misma consulta pero detrás de su propio candado de rol.
+@require_GET
+@requiere_rol("Administrador")
+def reportes_view(request):
+    """
+    GET /api/reportes/?tipo=inventario|ventas|stock-bajo|movimientos|resumen
+    Por defecto (sin ?tipo o tipo=resumen) regresa las 3 tarjetas resumen.
+    """
+    tipo = request.GET.get("tipo", "resumen").strip().lower()
+    limit = int(request.GET.get("limit", 200))
+
+    if tipo == "inventario":
+        productos = Producto.objects.filter(estatus="activo").select_related("catcve").order_by("procve")[:limit]
+        stocks = {s.procve_id: s for s in Stock.objects.filter(procve__in=productos)}
+        data = [
+            {
+                "id": p.procve,
+                "codigo": p.modelo or f"PROD-{p.procve:04d}",
+                "nombre": p.nombre,
+                "categoria": p.catcve.nombre if p.catcve else None,
+                "precio": float(p.precio),
+                "stock": stocks[p.procve].stock_actual if p.procve in stocks else 0,
+                "stock_minimo": stocks[p.procve].stock_minimo if p.procve in stocks else 0,
+            }
+            for p in productos
+        ]
+        return JsonResponse({"ok": True, "tipo": tipo, "data": data, "total": len(data)})
+
+    if tipo == "ventas":
+        ventas = Venta.objects.filter(estatus="completada").select_related("empcve", "clicve").order_by("-vencve")[:limit]
+        data = [
+            {
+                "vencve": v.vencve,
+                "total": float(v.total),
+                "empleado": v.empcve.nombre,
+                "cliente": v.clicve.nombre if v.clicve else None,
+                "metodo_pago": v.metodo_pago,
+                "tipo_entrega": v.tipo_entrega,
+                "fecha": v.fecha,
+            }
+            for v in ventas
+        ]
+        return JsonResponse({"ok": True, "tipo": tipo, "data": data, "total": len(data)})
+
+    if tipo == "stock-bajo":
+        stocks = Stock.objects.filter(estatus="alerta").select_related("procve").order_by("stock_actual")[:limit]
+        data = [
+            {"nombre": s.procve.nombre, "stock": s.stock_actual, "stock_minimo": s.stock_minimo}
+            for s in stocks
+        ]
+        return JsonResponse({"ok": True, "tipo": tipo, "data": data, "total": len(data)})
+
+    if tipo == "movimientos":
+        data = _obtener_movimientos()[:limit]
+        return JsonResponse({"ok": True, "tipo": tipo, "data": data, "total": len(data)})
+
+    # tipo == "resumen" (default): las 3 tarjetas resumen de reportes.html
+    hoy = date.today()
+    ventas_mes = Venta.objects.filter(estatus="completada", fecha__year=hoy.year, fecha__month=hoy.month)
+    ventas_mes_total = ventas_mes.aggregate(suma=Sum("total"))["suma"] or 0
+    ventas_mes_count = ventas_mes.count()
+    total_productos = Producto.objects.filter(estatus="activo").count()
+    stock_bajo = Stock.objects.filter(estatus="alerta", stock_actual__gt=0).count()
+    agotados = Stock.objects.filter(stock_actual=0).count()
+
+    return JsonResponse({
+        "ok": True,
+        "tipo": "resumen",
+        "data": {
+            "totalProductos": total_productos,
+            "productosDisponibles": total_productos - agotados,
+            "stockBajo": stock_bajo,
+            "agotados": agotados,
+            "totalVentasMes": ventas_mes_count,
+            "ventasMes": float(ventas_mes_total),
+            "alertasPendientes": stock_bajo + agotados,
+        }
+    })
+
+# ── Movimientos de inventario (movimientos.html, ambos roles) ─
+# Decisión del equipo: NO se agrega una tabla 'movimiento' nueva para no
+# tocar el modelo ER/BD ya definido. Esta es una primera versión que
+# reconstruye el historial con lo que ya existe:
+#   - "salida": cada línea de detalle_venta (sí tiene fecha real y es
+#     un registro histórico confiable, no se pierde con el tiempo).
+#   - "ajuste": el nivel de stock actual por producto (stock.fecha se
+#     sobrescribe en cada sp_disminuir_stock/sp_abastecer_stock, así que
+#     esto NO es un historial real de entradas, solo la última foto
+#     conocida). Se etiqueta como tal para no aparentar ser algo que no es.
+# Si más adelante se necesita un historial completo y confiable de
+# entradas individuales, ahí sí conviene la tabla 'movimiento' con
+# trigger, tal como se discutió.
+def _obtener_movimientos(search="", tipo_filtro=""):
+    """
+    No existe una tabla de movimientos real (decisión: no tocar el modelo
+    ER/BD ya definido). Se reconstruye con lo que ya existe:
+      - "Salida": cada línea de detalle_venta. Es historial real y
+        confiable (fecha real, no se sobrescribe, sabemos qué empleado
+        hizo la venta).
+      - "Ajuste": el nivel de stock actual por producto. stock.fecha se
+        sobrescribe en cada sp_disminuir_stock/sp_abastecer_stock, así
+        que esto NO es un historial real de entradas — es solo la
+        última foto conocida de cada producto. Se etiqueta como tal.
+    No hay ninguna fuente para "Entrada" real todavía (no se guarda quién
+    ni cuándo reabasteció cada vez, solo el nivel resultante). Si el
+    filtro pide "Entrada" simplemente no habrá resultados por ahora.
+    """
+    movimientos = []
+
+    detalles = (
+        DetalleVenta.objects.filter(estatus="activo")
+        .select_related("procve", "procve__catcve", "vencve", "vencve__empcve")
+    )
+    for d in detalles:
+        p = d.procve
+        emp = d.vencve.empcve if d.vencve else None
+        movimientos.append({
+            "tipo": "Salida",
+            "cantidad": -d.cantidad,
+            "created_at": d.fecha,
+            "producto_nombre": p.nombre,
+            "producto_codigo": p.modelo or f"PROD-{p.procve:04d}",
+            "categoria": p.catcve.nombre if p.catcve else None,
+            "referencia": f"Venta V-{d.vencve_id:04d}",
+            "stock_anterior": None,
+            "stock_actual": None,
+            "usuario_nombre": f"{emp.nombre} {emp.apellidopaterno}".strip() if emp else None,
+        })
+
+    for s in Stock.objects.select_related("procve", "procve__catcve"):
+        p = s.procve
+        movimientos.append({
+            "tipo": "Ajuste",
+            "cantidad": 0,
+            "created_at": s.fecha,
+            "producto_nombre": p.nombre,
+            "producto_codigo": p.modelo or f"PROD-{p.procve:04d}",
+            "categoria": p.catcve.nombre if p.catcve else None,
+            "referencia": "Última foto de stock (sin historial de entradas)",
+            "stock_anterior": None,
+            "stock_actual": s.stock_actual,
+            "usuario_nombre": None,
+        })
+
+    if tipo_filtro:
+        movimientos = [m for m in movimientos if m["tipo"] == tipo_filtro]
+    if search:
+        s_lower = search.lower()
+        movimientos = [
+            m for m in movimientos
+            if s_lower in (m["producto_nombre"] or "").lower()
+            or s_lower in (m["producto_codigo"] or "").lower()
+            or s_lower in (m["referencia"] or "").lower()
+        ]
+
+    movimientos.sort(key=lambda m: m["created_at"], reverse=True)
+    return movimientos
+
+
+@require_GET
+@requiere_rol("Administrador", "Vendedor")
+def movimientos_view(request):
+    page = int(request.GET.get("page", 1))
+    limit = int(request.GET.get("limit", 10))
+    search = request.GET.get("search", "").strip()
+    tipo_filtro = request.GET.get("tipo", "").strip()
+
+    todos = _obtener_movimientos(search=search, tipo_filtro=tipo_filtro)
+    total = len(todos)
+    start = (page - 1) * limit
+    data = todos[start:start + limit]
+
+    return JsonResponse({"ok": True, "data": data, "total": total})

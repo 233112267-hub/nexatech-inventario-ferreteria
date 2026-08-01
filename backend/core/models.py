@@ -128,4 +128,45 @@ class Stock(models.Model):
     class Meta:
         managed = False
         db_table = 'stock'
+
+
+
+# ── Alerta (persistida, con estado propio) ────────────────────
+# Antes las alertas se calculaban al vuelo desde Stock y no se guardaban
+# en ningún lado. Esta tabla SÍ guarda cada alerta y su ciclo de vida:
+# Pendiente -> Notificada (se mandó el correo) -> Resuelta (se reabasteció).
+# Ver database/migracion_alerta.sql para el DDL que hay que correr en la BD.
+class Alerta(models.Model):
+    alertcve = models.AutoField(primary_key=True)
+    procve = models.ForeignKey(Producto, on_delete=models.DO_NOTHING, db_column='procve')
+    tipo = models.CharField(max_length=20)          # 'Crítica' | 'Advertencia'
+    estado = models.CharField(max_length=20, default='Pendiente')  # Pendiente | Notificada | Resuelta
+    descripcion = models.CharField(max_length=200, blank=True, null=True)
+    fecha_creacion = models.DateTimeField(auto_now_add=True)
+    fecha_notificacion = models.DateTimeField(blank=True, null=True)
+    fecha_resolucion = models.DateTimeField(blank=True, null=True)
+
+    class Meta:
+        managed = False
+        db_table = 'alerta'
+
+
+class Alerta(models.Model):
+    """
+    Alerta persistida con su propio ciclo de estado:
+    Pendiente -> Notificada -> Resuelta.
+    Requiere la tabla 'alerta' (ver database/schema_postgres.sql, sección 6).
+    """
+    alertcve = models.AutoField(primary_key=True)
+    procve = models.ForeignKey(Producto, on_delete=models.DO_NOTHING, db_column='procve')
+    tipo = models.CharField(max_length=20)  # 'Crítica' | 'Advertencia'
+    estado = models.CharField(max_length=20, default='Pendiente')  # 'Pendiente' | 'Notificada' | 'Resuelta'
+    descripcion = models.CharField(max_length=200, blank=True, null=True)
+    fecha_creacion = models.DateTimeField(auto_now_add=True)
+    fecha_actualizacion = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        managed = False
+        db_table = 'alerta'
         
+

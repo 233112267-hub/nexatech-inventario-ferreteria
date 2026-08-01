@@ -34,6 +34,14 @@ urlpatterns = [
 
     # ── Alertas ───────────────────────────────────────────────
     path('api/alertas/', views.alertas_view),
+    path('api/alertas/<int:alertcve>/notificar', views.alerta_notificar_view),
+    path('api/alertas/<int:alertcve>/resolver', views.alerta_resolver_view),
+
+    #  Movimientos de inventario (Admin + Vendedor) ─────────
+    path('api/movimientos/', views.movimientos_view),
+
+    #  Reportes (solo Administrador) ────────────────────────
+    path('api/reportes/', views.reportes_view),
 
     # ── Dashboard ─────────────────────────────────────────────
     path('api/dashboard/stats/', views.dashboard_stats_view),

@@ -19,7 +19,7 @@
   .type-badge{display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:20px;font-size:.72rem;font-weight:700;white-space:nowrap;}
   .type-critica{background:#fee2e2;color:#dc2626;}.type-advertencia{background:#fef3c7;color:#d97706;}
   .estado-badge{display:inline-block;padding:3px 10px;border-radius:20px;font-size:.72rem;font-weight:700;}
-  .eb-pendiente{background:#fef3c7;color:#d97706;}.eb-resuelta{background:#dcfce7;color:#16a34a;}
+  .eb-pendiente{background:#fef3c7;color:#d97706;}.eb-resuelta{background:#dcfce7;color:#16a34a;}.eb-notificada{background:#dbeafe;color:#2563a8;}
   .prod-cell{display:flex;align-items:center;gap:.6rem;}
   .prod-thumb{width:34px;height:34px;background:var(--bg);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:1.1rem;flex-shrink:0;}
   .act-resolve{width:30px;height:30px;border-radius:7px;border:none;background:#dcfce7;color:#16a34a;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;transition:opacity .15s;}
@@ -65,7 +65,7 @@
     <div class="filters" style="flex-wrap:wrap;">
       <div class="filter-search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg><input type="text" id="searchInput" placeholder="Buscar alerta..."></div>
       <div class="filter-group"><label>Tipo</label><select id="tipoFilter"><option value="">Todas</option><option value="Crítica">Crítica</option><option value="Advertencia">Advertencia</option></select></div>
-      <div class="filter-group"><label>Estado</label><select id="estadoFilter"><option value="">Todos</option><option value="Pendiente">Pendiente</option><option value="Resuelta">Resuelta</option></select></div>
+      <div class="filter-group"><label>Estado</label><select id="estadoFilter"><option value="">Todos</option><option value="Pendiente">Pendiente</option><option value="Notificada">Notificada</option><option value="Resuelta">Resuelta</option></select></div>
       <button class="btn-clear" onclick="clearFilters()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>Limpiar</button>
     </div>
     <div class="table-wrap">
@@ -96,7 +96,7 @@ async function loadKPIs(){
 }
 
 function typeBadge(t){const cls=t==='Crítica'?'type-critica':'type-advertencia';return`<span class="type-badge ${cls}">${t}</span>`;}
-function estadoBadge(e){const cls=e==='Pendiente'?'eb-pendiente':'eb-resuelta';return`<span class="estado-badge ${cls}">${e}</span>`;}
+function estadoBadge(e){const cls=e==='Pendiente'?'eb-pendiente':e==='Notificada'?'eb-notificada':'eb-resuelta';return`<span class="estado-badge ${cls}">${e}</span>`;}
 
 async function loadAlertas(){
   const q=document.getElementById('searchInput').value;
@@ -116,7 +116,7 @@ async function loadAlertas(){
       <td>${estadoBadge(a.estado)}</td>
       <td style="white-space:nowrap;">
         ${a.estado==='Pendiente'?`<button class="act-notify" onclick="notifyAlert(${a.id})" title="Notificar por correo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 6l-10 7L2 6"/><rect x="2" y="4" width="20" height="16" rx="2"/></svg></button>`:''}
-        ${a.estado==='Pendiente'?`<button class="act-resolve" onclick="resolveAlert(${a.id})" title="Marcar resuelta"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg></button>`:''}
+        ${a.estado!=='Resuelta'?`<button class="act-resolve" onclick="resolveAlert(${a.id})" title="Marcar resuelta"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg></button>`:''}
       </td>
     </tr>`;
   }).join('')||'<tr><td colspan="6" style="text-align:center;padding:2rem;color:var(--muted);">Sin alertas</td></tr>';
