@@ -17,14 +17,19 @@ class Surcusal(models.Model):
 class Empleado(models.Model):
     empcve = models.AutoField(primary_key=True)
     surcve = models.ForeignKey(Surcusal, on_delete=models.DO_NOTHING, db_column='surcve')
+    stocve = models.ForeignKey('Stock', on_delete=models.DO_NOTHING, db_column='stocve', blank=True, null=True)
     nombre = models.CharField(max_length=60)
     apellidopaterno = models.CharField(max_length=60)
     apellidomaterno = models.CharField(max_length=60, blank=True, null=True)
     rol = models.CharField(max_length=20)
+    descripcion = models.CharField(max_length=150, blank=True, null=True)
     estatus = models.CharField(max_length=20, default='activo')
     username = models.CharField(max_length=50, unique=True)
     email = models.CharField(max_length=100, unique=True)
     password = models.CharField(max_length=255)
+    fecha = models.DateField(auto_now_add=True)
+    direccion = models.CharField(max_length=200, blank=True, null=True)
+    codigopostal = models.CharField(max_length=10, blank=True, null=True)
     reset_token = models.CharField(max_length=64, blank=True, null=True)
     reset_token_expira = models.DateTimeField(blank=True, null=True)
 
@@ -137,21 +142,6 @@ class Stock(models.Model):
 # Pendiente -> Notificada (se mandó el correo) -> Resuelta (se reabasteció).
 # Ver database/migracion_alerta.sql para el DDL que hay que correr en la BD.
 class Alerta(models.Model):
-    alertcve = models.AutoField(primary_key=True)
-    procve = models.ForeignKey(Producto, on_delete=models.DO_NOTHING, db_column='procve')
-    tipo = models.CharField(max_length=20)          # 'Crítica' | 'Advertencia'
-    estado = models.CharField(max_length=20, default='Pendiente')  # Pendiente | Notificada | Resuelta
-    descripcion = models.CharField(max_length=200, blank=True, null=True)
-    fecha_creacion = models.DateTimeField(auto_now_add=True)
-    fecha_notificacion = models.DateTimeField(blank=True, null=True)
-    fecha_resolucion = models.DateTimeField(blank=True, null=True)
-
-    class Meta:
-        managed = False
-        db_table = 'alerta'
-
-
-class Alerta(models.Model):
     """
     Alerta persistida con su propio ciclo de estado:
     Pendiente -> Notificada -> Resuelta.
@@ -169,4 +159,3 @@ class Alerta(models.Model):
         managed = False
         db_table = 'alerta'
         
-

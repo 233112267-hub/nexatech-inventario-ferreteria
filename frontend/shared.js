@@ -10,14 +10,46 @@ const API = (window.location.hostname === 'localhost' || window.location.hostnam
 function checkAuth() {
   const token = localStorage.getItem('token');
   if (!token) { window.location.href = 'login.html'; return null; }
+  enforceRoleAccess();
+  applyNavRoleVisibility();
   return token;
+}
+
+// ── Control de acceso por rol (páginas completas) ────────────
+// Estas páginas son exclusivas de Administrador. Si el rol actual
+// no es Administrador, se redirige antes de que la página cargue
+// ningún dato (protección de UI; el backend sigue siendo la
+// verdadera barrera, esto solo evita exponer la pantalla).
+const PAGINAS_SOLO_ADMIN = ['usuarios.html', 'reportes.html', 'alertas.html'];
+
+function enforceRoleAccess() {
+  const rol = localStorage.getItem('rol');
+  const pagina = window.location.pathname.split('/').pop();
+  if (PAGINAS_SOLO_ADMIN.includes(pagina) && rol !== 'Administrador') {
+    window.location.href = 'dashboard.html';
+  }
+}
+
+// ── Ocultar enlaces/accesos rápidos a secciones restringidas ─
+function applyNavRoleVisibility() {
+  const rol = localStorage.getItem('rol');
+  if (rol === 'Administrador') return; // ve todo el menú
+  PAGINAS_SOLO_ADMIN.forEach(pagina => {
+    document.querySelectorAll(`a[href="${pagina}"]`).forEach(el => el.style.display = 'none');
+  });
 }
 
 // ── Fetch autenticado ────────────────────────────────────────
 async function apiFetch(endpoint, options = {}) {
   const token = localStorage.getItem('token');
+  // Django exige que la URL termine en "/" y con POST/PUT/DELETE no puede
+  // redirigir agregándolo (pierde el body). Normalizamos aquí una sola vez
+  // para no tener que acordarnos del slash en cada llamada del frontend.
+  const [path, query] = endpoint.split('?');
+  const normalizedPath = path.endsWith('/') ? path : path + '/';
+  const finalEndpoint = query ? `${normalizedPath}?${query}` : normalizedPath;
   try {
-    const res = await fetch(API + endpoint, {
+    const res = await fetch(API + finalEndpoint, {
       ...options,
       headers: {
         'Content-Type': 'application/json',

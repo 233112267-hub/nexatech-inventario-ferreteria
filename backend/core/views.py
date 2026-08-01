@@ -63,7 +63,7 @@ def login_view(request):
 
     if tipo == "empleado":
         payload["empcve"] = usuario.empcve
-        payload["rol"] = usuario.rol  # 'Administrador', 'Vendedor', 'Almacenista'
+        payload["rol"] = usuario.rol  # 'Administrador' o 'Vendedor'
     else:
         payload["clicve"] = usuario.clicve
         payload["membresia"] = usuario.membresia
@@ -624,33 +624,33 @@ def crear_venta_view(request):
     try:
         data = json.loads(request.body)
     except json.JSONDecodeError:
-        return JsonResponse({"error": "JSON inválido"}, status=400)
+        return JsonResponse({"ok": False, "message": "JSON inválido"}, status=400)
 
     empcve = data.get("empcve")
     clicve = data.get("clicve")  # opcional, venta puede ser sin cliente registrado
     items = data.get("items")    # lista de {"procve": X, "cantidad": Y}
 
     if not empcve or not items or not isinstance(items, list) or len(items) == 0:
-        return JsonResponse({"error": "Faltan campos obligatorios: empcve, items (lista no vacía)"}, status=400)
+        return JsonResponse({"ok": False, "message": "Faltan campos obligatorios: empcve, items (lista no vacía)"}, status=400)
 
     try:
         empleado = Empleado.objects.get(empcve=empcve)
     except Empleado.DoesNotExist:
-        return JsonResponse({"error": "El empleado indicado no existe"}, status=400)
+        return JsonResponse({"ok": False, "message": "El empleado indicado no existe"}, status=400)
 
     cliente = None
     if clicve:
         try:
             cliente = Cliente.objects.get(clicve=clicve)
         except Cliente.DoesNotExist:
-            return JsonResponse({"error": "El cliente indicado no existe"}, status=400)
+            return JsonResponse({"ok": False, "message": "El cliente indicado no existe"}, status=400)
 
     tipo_entrega = data.get("tipo_entrega", "mostrador")
     if tipo_entrega not in ("mostrador", "domicilio"):
-        return JsonResponse({"error": "tipo_entrega inválido. Use mostrador o domicilio"}, status=400)
+        return JsonResponse({"ok": False, "message": "tipo_entrega inválido. Use mostrador o domicilio"}, status=400)
 
     if tipo_entrega == "domicilio" and not data.get("direccion_entrega"):
-        return JsonResponse({"error": "domicilio requiere direccion_entrega"}, status=400)
+        return JsonResponse({"ok": False, "message": "domicilio requiere direccion_entrega"}, status=400)
 
     # Validar cada item antes de tocar la base de datos
     productos_validados = []
@@ -659,12 +659,12 @@ def crear_venta_view(request):
         cantidad = item.get("cantidad")
 
         if not procve or not cantidad or cantidad <= 0:
-            return JsonResponse({"error": "Cada item requiere procve y cantidad > 0"}, status=400)
+            return JsonResponse({"ok": False, "message": "Cada item requiere procve y cantidad > 0"}, status=400)
 
         try:
             producto = Producto.objects.get(procve=procve, estatus="activo")
         except Producto.DoesNotExist:
-            return JsonResponse({"error": f"El producto {procve} no existe o está inactivo"}, status=400)
+            return JsonResponse({"ok": False, "message": f"El producto {procve} no existe o está inactivo"}, status=400)
 
         productos_validados.append((producto, cantidad))
 
@@ -696,7 +696,7 @@ def crear_venta_view(request):
     except DatabaseError as e:
         # Aquí llega el RAISE EXCEPTION de sp_disminuir_stock cuando el stock es insuficiente
         mensaje = str(e).split("\n")[0]  # primera línea, evita el traceback completo de SQL
-        return JsonResponse({"error": f"No se pudo completar la venta: {mensaje}"}, status=400)
+        return JsonResponse({"ok": False, "message": f"No se pudo completar la venta: {mensaje}"}, status=400)
 
     venta.refresh_from_db()
 
@@ -713,7 +713,9 @@ def crear_venta_view(request):
     ]
 
     return JsonResponse({
+        "ok": True,
         "mensaje": "Venta creada correctamente",
+        "folio": f"V-{venta.vencve:04d}",
         "venta": {
             "vencve": venta.vencve,
             "total": str(venta.total),
@@ -723,26 +725,6 @@ def crear_venta_view(request):
             "detalles": detalles_data,
         }
     }, status=201)
-@require_GET
-@requiere_rol("Administrador", "Vendedor")
-def listar_ventas_view(request):
-    ventas = Venta.objects.filter(estatus="completada").select_related("empcve", "clicve")
-
-    data = [
-        {
-            "vencve": v.vencve,
-            "total": str(v.total),
-            "subtotal": str(v.subtotal),
-            "empleado": v.empcve.nombre,
-            "cliente": v.clicve.nombre if v.clicve else None,
-            "metodo_pago": v.metodo_pago,
-            "tipo_entrega": v.tipo_entrega,
-            "fecha": v.fecha,
-        }
-        for v in ventas
-    ]
-
-    return JsonResponse({"ventas": data}, status=200)
 
 @require_GET
 @requiere_rol("Administrador", "Vendedor")
@@ -924,7 +906,7 @@ def ventas_semana_view(request):
 
 #/productos/stock-bajo — la barra de stock bajo:
 @require_GET
-@requiere_rol("Administrador", "Vendedor", "Almacenista")
+@requiere_rol("Administrador", "Vendedor")
 def stock_bajo_view(request):
     stocks = Stock.objects.filter(estatus="alerta").select_related("procve").order_by("stock_actual")
 
@@ -954,7 +936,7 @@ def ventas_recientes_view(request):
 
 #/alertas con ?estado=Pendiente&limit= — lista de alertas:
 @require_GET
-@requiere_rol("Administrador", "Vendedor", "Almacenista")
+@requiere_rol("Administrador", "Vendedor")
 def alertas_view(request):
     limit = int(request.GET.get("limit", 10))
     stocks = Stock.objects.filter(estatus="alerta").select_related("procve").order_by("stock_actual")[:limit]
@@ -1075,7 +1057,7 @@ def alerta_resolver_view(request, alertcve):
 # /categorias con conteo — para la dona de "Productos por categoría":
 @csrf_exempt
 @require_http_methods(["GET", "POST"])
-@requiere_rol("Administrador", "Vendedor", "Almacenista")
+@requiere_rol("Administrador", "Vendedor")
 def categorias_con_conteo_view(request):
     if request.method == "GET":
         categorias = Categoria.objects.filter(estatus="activo").annotate(
@@ -1137,12 +1119,13 @@ def usuarios_view(request):
         rol = request.GET.get("rol", "").strip()
         estado = request.GET.get("estado", "").strip()
 
-        qs = Empleado.objects.all()
+        qs = Empleado.objects.select_related("surcve")
 
         if search:
             qs = qs.filter(
                 Q(nombre__icontains=search) |
                 Q(apellidopaterno__icontains=search) |
+                Q(apellidomaterno__icontains=search) |
                 Q(username__icontains=search) |
                 Q(email__icontains=search)
             )
@@ -1159,10 +1142,20 @@ def usuarios_view(request):
             {
                 "id": e.empcve,
                 "nombre": f"{e.nombre} {e.apellidopaterno}".strip(),
+                # Campos individuales para que el modal de edición no tenga
+                # que volver a adivinar dónde corta el nombre completo.
+                "nombre_solo": e.nombre,
+                "apellidopaterno": e.apellidopaterno,
+                "apellidomaterno": e.apellidomaterno,
                 "usuario": e.username,
                 "correo": e.email,
                 "rol": e.rol,
                 "estado": e.estatus.capitalize(),
+                "descripcion": e.descripcion,
+                "direccion": e.direccion,
+                "codigopostal": e.codigopostal,
+                "surcursal_id": e.surcve_id,
+                "surcursal": f"{e.surcve.municipio} — {e.surcve.localidad}" if e.surcve else None,
             }
             for e in empleados
         ]
@@ -1174,22 +1167,24 @@ def usuarios_view(request):
     except json.JSONDecodeError:
         return JsonResponse({"ok": False, "message": "JSON inválido"}, status=400)
 
-    nombre_completo = data.get("nombre", "").strip()
+    nombre = data.get("nombre", "").strip()
+    apellidopaterno = data.get("apellidopaterno", "").strip()
+    apellidomaterno = data.get("apellidomaterno", "").strip()
     usuario = data.get("usuario", "").strip()
     correo = data.get("correo", "").strip()
     password = data.get("password", "")
     rol = data.get("rol", "Vendedor")
     estado = data.get("estado", "Activo")
+    descripcion = data.get("descripcion", "").strip()
+    direccion = data.get("direccion", "").strip()
+    codigopostal = data.get("codigopostal", "").strip()
+    surcursal_id = data.get("surcursal_id") or 1
 
-    if not all([nombre_completo, usuario, correo, password]):
-        return JsonResponse({"ok": False, "message": "Faltan campos obligatorios"}, status=400)
+    if not all([nombre, apellidopaterno, usuario, correo, password]):
+        return JsonResponse({"ok": False, "message": "Nombre, apellido paterno, usuario, correo y contraseña son obligatorios"}, status=400)
 
-    if rol not in ("Administrador", "Vendedor", "Almacenista"):
+    if rol not in ("Administrador", "Vendedor"):
         return JsonResponse({"ok": False, "message": "Rol inválido"}, status=400)
-
-    partes = nombre_completo.split(" ", 1)
-    nombre = partes[0]
-    apellidopaterno = partes[1] if len(partes) > 1 else "-"
 
     if Empleado.objects.filter(username=usuario).exists():
         return JsonResponse({"ok": False, "message": "El usuario ya está en uso"}, status=400)
@@ -1197,22 +1192,31 @@ def usuarios_view(request):
         return JsonResponse({"ok": False, "message": "El correo ya está en uso"}, status=400)
 
     try:
-        sucursal = Surcusal.objects.get(surcve=1)
+        sucursal = Surcusal.objects.get(surcve=surcursal_id)
     except Surcusal.DoesNotExist:
-        return JsonResponse({"ok": False, "message": "No hay sucursal configurada por defecto"}, status=400)
+        return JsonResponse({"ok": False, "message": "La sucursal indicada no existe"}, status=400)
 
     password_hash = bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt(10)).decode("utf-8")
 
-    empleado = Empleado.objects.create(
-        surcve=sucursal,
-        nombre=nombre,
-        apellidopaterno=apellidopaterno,
-        rol=rol,
-        username=usuario,
-        email=correo,
-        password=password_hash,
-        estatus=estado.lower(),
-    )
+    try:
+        empleado = Empleado.objects.create(
+            surcve=sucursal,
+            nombre=nombre,
+            apellidopaterno=apellidopaterno,
+            apellidomaterno=apellidomaterno or None,
+            rol=rol,
+            descripcion=descripcion or None,
+            direccion=direccion or None,
+            codigopostal=codigopostal or None,
+            username=usuario,
+            email=correo,
+            password=password_hash,
+            estatus=estado.lower(),
+        )
+    except DatabaseError as e:
+        # Ej: violación de un CHECK/constraint de la BD (usuario/correo duplicado, etc.)
+        mensaje = str(e).split("\n")[0]
+        return JsonResponse({"ok": False, "message": f"No se pudo crear el usuario: {mensaje}"}, status=400)
 
     return JsonResponse({"ok": True, "data": {"id": empleado.empcve}})
 
@@ -1237,11 +1241,23 @@ def usuario_detail_view(request, empcve):
     except json.JSONDecodeError:
         return JsonResponse({"ok": False, "message": "JSON inválido"}, status=400)
 
-    nombre_completo = data.get("nombre", "").strip()
-    if nombre_completo:
-        partes = nombre_completo.split(" ", 1)
-        empleado.nombre = partes[0]
-        empleado.apellidopaterno = partes[1] if len(partes) > 1 else "-"
+    if data.get("nombre"):
+        empleado.nombre = data["nombre"].strip()
+    if data.get("apellidopaterno"):
+        empleado.apellidopaterno = data["apellidopaterno"].strip()
+    if "apellidomaterno" in data:
+        empleado.apellidomaterno = data["apellidomaterno"].strip() or None
+    if "descripcion" in data:
+        empleado.descripcion = data["descripcion"].strip() or None
+    if "direccion" in data:
+        empleado.direccion = data["direccion"].strip() or None
+    if "codigopostal" in data:
+        empleado.codigopostal = data["codigopostal"].strip() or None
+    if data.get("surcursal_id"):
+        try:
+            empleado.surcve = Surcusal.objects.get(surcve=data["surcursal_id"])
+        except Surcusal.DoesNotExist:
+            return JsonResponse({"ok": False, "message": "La sucursal indicada no existe"}, status=400)
 
     if data.get("usuario"):
         nuevo_usuario = data["usuario"].strip()
@@ -1256,7 +1272,7 @@ def usuario_detail_view(request, empcve):
         empleado.email = nuevo_correo
 
     if data.get("rol"):
-        if data["rol"] not in ("Administrador", "Vendedor", "Almacenista"):
+        if data["rol"] not in ("Administrador", "Vendedor"):
             return JsonResponse({"ok": False, "message": "Rol inválido"}, status=400)
         empleado.rol = data["rol"]
 
@@ -1266,13 +1282,50 @@ def usuario_detail_view(request, empcve):
     if data.get("password"):
         empleado.password = bcrypt.hashpw(data["password"].encode("utf-8"), bcrypt.gensalt(10)).decode("utf-8")
 
-    empleado.save()
+    try:
+        empleado.save()
+    except DatabaseError as e:
+        mensaje = str(e).split("\n")[0]
+        return JsonResponse({"ok": False, "message": f"No se pudo actualizar el usuario: {mensaje}"}, status=400)
+
     return JsonResponse({"ok": True})
+
+#/sucursales/ — para el selector de sucursal en el modal de usuarios:
+@require_GET
+@requiere_rol("Administrador")
+def sucursales_view(request):
+    sucursales = Surcusal.objects.all().order_by("surcve")
+    data = [
+        {"id": s.surcve, "nombre": f"{s.municipio} — {s.localidad}"}
+        for s in sucursales
+    ]
+    return JsonResponse({"ok": True, "data": data})
+
+#/usuarios/vendedores/ — lista liviana de empleados activos para el
+# selector de "Vendedor" en ventas.html. A diferencia de usuarios_view
+# (exclusivo Administrador), este endpoint lo puede llamar cualquier
+# empleado que registre ventas.
+@require_GET
+@requiere_rol("Administrador", "Vendedor")
+def usuarios_vendedores_view(request):
+    empleados = Empleado.objects.filter(
+        estatus="activo", rol__in=["Administrador", "Vendedor"]
+    ).order_by("nombre")
+
+    data = [
+        {
+            "id": e.empcve,
+            "nombre": f"{e.nombre} {e.apellidopaterno}".strip(),
+            "rol": e.rol,
+        }
+        for e in empleados
+    ]
+    return JsonResponse({"ok": True, "data": data})
 
 #/productos con ?page=1&limit=8&search=&categoria=&estado= — tabla de productos:
 @csrf_exempt
 @require_http_methods(["GET", "POST"])
-@requiere_rol("Administrador", "Vendedor", "Almacenista")
+@requiere_rol("Administrador", "Vendedor")
 def productos_ui_view(request):
     if request.method == "GET":
         # GET: cualquiera de los 3 roles puede ver el listado
@@ -1366,7 +1419,7 @@ def productos_ui_view(request):
 #
 @csrf_exempt
 @require_http_methods(["PUT", "DELETE"])
-@requiere_rol("Administrador", "Vendedor", "Almacenista")  # todos entran, pero se filtra dentro
+@requiere_rol("Administrador", "Vendedor")
 def producto_ui_detail_view(request, procve):
     # Solo Administrador puede editar o eliminar
     if request.usuario_jwt.get("rol") != "Administrador":

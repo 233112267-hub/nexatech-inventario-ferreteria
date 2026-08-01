@@ -137,20 +137,6 @@
 <script>
 checkAuth(); setupLogout(); renderUserInfo();
 
-// Solo Administrador y Vendedor pueden registrar ventas; Almacenista no.
-(function restringirAlmacenista(){
-  const user=JSON.parse(localStorage.getItem('user')||'{}');
-  if(user.rol==='Almacenista'){
-    const btn=document.getElementById('btnFinalizar');
-    if(btn){
-      btn.disabled=true;
-      btn.style.opacity='.5';
-      btn.style.cursor='not-allowed';
-      btn.title='Tu rol (Almacenista) no puede registrar ventas';
-    }
-    showToast('Tu rol no tiene permiso para registrar ventas','error');
-  }
-})();
 const EMOJIS={Herramientas:'🔧',Ferretería:'🪛',Materiales:'🧱',Pintura:'🎨',Eléctricos:'⚡',Plomería:'🚿',Seguridad:'🧤'};
 let cart=[], prodPage=1, allProds=[], filteredProds=[];
 
@@ -178,7 +164,7 @@ document.getElementById('searchProd').addEventListener('input',()=>{prodPage=1;l
 
 // Cargar usuarios (solo Vendedor y Administrador) para dropdown vendedor
 async function loadVendedores(){
-  const data=await apiFetch('/usuarios/vendedores');
+  const data=await apiFetch('/usuarios/vendedores/');
   if(!data||!data.ok) return;
   const user=JSON.parse(localStorage.getItem('user')||'{}');
   const sel=document.getElementById('saleVendedor');
@@ -247,17 +233,19 @@ document.getElementById('btnFinalizar').addEventListener('click', async ()=>{
   if(!cart.length){showToast('Agrega al menos un producto','error');return;}
   const btn=document.getElementById('btnFinalizar');
   btn.classList.add('loading');
+  const user=JSON.parse(localStorage.getItem('user')||'{}');
+  const clienteNombre=document.getElementById('saleCliente').value.trim();
   const body={
-    cliente:document.getElementById('saleCliente').value.trim()||null,
-    metodo_pago:document.getElementById('salePago').value,
-    vendedor_id:document.getElementById('saleVendedor').value||null,
-    items:cart.map(i=>({producto_id:i.id,cantidad:i.qty}))
+    empcve:Number(document.getElementById('saleVendedor').value)||user.id,
+    descripcion:clienteNombre?`Cliente: ${clienteNombre}`:null,
+    metodo_pago:document.getElementById('salePago').value.toLowerCase(),
+    items:cart.map(i=>({procve:i.id,cantidad:i.qty}))
   };
-  const data=await apiFetch('/ventas',{method:'POST',body:JSON.stringify(body)});
+  const data=await apiFetch('/ventas/crear/',{method:'POST',body:JSON.stringify(body)});
   btn.classList.remove('loading');
   if(!data)return;
   if(!data.ok){showToast(data.message||'Error al procesar la venta','error');return;}
-  document.getElementById('ventaFolioMsg').textContent=`Folio: ${data.folio} — Total: $${Number(data.total).toFixed(2)}`;
+  document.getElementById('ventaFolioMsg').textContent=`Folio: ${data.folio} — Total: $${Number(data.venta.total).toFixed(2)}`;
   cart=[];renderCart();
   openModal('modalOK');
   loadProds(); // refrescar stock

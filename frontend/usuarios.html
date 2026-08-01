@@ -44,7 +44,7 @@
 <div class="content">
   <div class="filters">
     <div class="filter-search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg><input type="text" id="searchInput" placeholder="Buscar usuario..."></div>
-    <div class="filter-group"><label>Rol</label><select id="rolFilter"><option value="">Todos</option><option>Administrador</option><option>Vendedor</option><option>Almacenista</option></select></div>
+    <div class="filter-group"><label>Rol</label><select id="rolFilter"><option value="">Todos</option><option>Administrador</option><option>Vendedor</option></select></div>
     <div class="filter-group"><label>Estatus</label><select id="statusFilter"><option value="">Todos</option><option value="Activo">Activo</option><option value="Inactivo">Inactivo</option></select></div>
     <button class="btn-clear" onclick="clearFilters()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>Limpiar</button>
   </div>
@@ -57,15 +57,21 @@
 
 <!-- Modal usuario -->
 <div class="modal-overlay" id="modalUser" onclick="if(event.target===this)closeModal('modalUser')">
-  <div class="modal">
+  <div class="modal" style="max-width:560px;">
     <div class="modal-header"><h3 id="modalTitle">Nuevo usuario</h3><button class="modal-close" onclick="closeModal('modalUser')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div>
     <div class="form-row">
-      <div class="form-field"><label>Nombre completo</label><input type="text" id="fNombre" placeholder="Ej. Juan Pérez"></div>
+      <div class="form-field"><label>Nombre</label><input type="text" id="fNombre" placeholder="Ej. Juan"></div>
+      <div class="form-field"><label>Apellido paterno</label><input type="text" id="fApellidoPaterno" placeholder="Ej. Pérez"></div>
+      <div class="form-field"><label>Apellido materno (opcional)</label><input type="text" id="fApellidoMaterno" placeholder="Ej. García"></div>
       <div class="form-field"><label>Usuario</label><input type="text" id="fUsuario" placeholder="Ej. Juan.P"></div>
       <div class="form-field"><label>Correo</label><input type="email" id="fCorreo" placeholder="correo@gmail.com"></div>
       <div class="form-field"><label>Contraseña</label><input type="password" id="fPass" placeholder="••••••••"></div>
-      <div class="form-field"><label>Rol</label><select id="fRol"><option>Administrador</option><option>Vendedor</option><option>Almacenista</option></select></div>
+      <div class="form-field"><label>Rol</label><select id="fRol"><option>Administrador</option><option>Vendedor</option></select></div>
       <div class="form-field"><label>Estado</label><select id="fEstado"><option>Activo</option><option>Inactivo</option></select></div>
+      <div class="form-field"><label>Sucursal</label><select id="fSucursal"></select></div>
+      <div class="form-field"><label>Código postal (opcional)</label><input type="text" id="fCP" placeholder="Ej. 42000"></div>
+      <div class="form-field full"><label>Dirección (opcional)</label><input type="text" id="fDireccion" placeholder="Ej. Calle Morelos 12"></div>
+      <div class="form-field full"><label>Descripción / puesto (opcional)</label><textarea id="fDescripcion" placeholder="Ej. Ventas mostrador turno matutino"></textarea></div>
     </div>
     <div class="modal-footer"><button class="btn-cancel" onclick="closeModal('modalUser')">Cancelar</button><button class="btn-save" onclick="saveUser()">Guardar</button></div>
   </div>
@@ -84,7 +90,14 @@
 checkAuth();
 setupLogout();
 renderUserInfo();
-let currentPage=1, editingId=null, deleteId=null;
+let currentPage=1, editingId=null, deleteId=null, usersData=[], sucursalesData=[];
+
+async function loadSucursales(){
+  const data=await apiFetch('/sucursales');
+  if(!data||!data.ok) return;
+  sucursalesData=data.data;
+  document.getElementById('fSucursal').innerHTML=sucursalesData.map(s=>`<option value="${s.id}">${s.nombre}</option>`).join('');
+}
 
 async function loadUsers() {
   const q=document.getElementById('searchInput').value;
@@ -93,8 +106,9 @@ async function loadUsers() {
   const params=new URLSearchParams({page:currentPage,limit:8,...(q&&{search:q}),...(rol&&{rol}),...(est&&{estado:est})});
   const data = await apiFetch('/usuarios?'+params);
   if(!data||!data.ok) return;
-  const rolBadge=r=>{const m={Administrador:'#dbeafe|#1d4ed8',Vendedor:'#dcfce7|#15803d',Almacenista:'#fef3c7|#b45309'};const[bg,c]=(m[r]||'#f1f5f9|#64748b').split('|');return`<span style="background:${bg};color:${c};padding:3px 10px;border-radius:20px;font-size:.72rem;font-weight:700;">${r}</span>`;};
-  document.getElementById('tableBody').innerHTML = data.data.map(u=>`
+  usersData=data.data;
+  const rolBadge=r=>{const m={Administrador:'#dbeafe|#1d4ed8',Vendedor:'#dcfce7|#15803d'};const[bg,c]=(m[r]||'#f1f5f9|#64748b').split('|');return`<span style="background:${bg};color:${c};padding:3px 10px;border-radius:20px;font-size:.72rem;font-weight:700;">${r}</span>`;};
+  document.getElementById('tableBody').innerHTML = usersData.map(u=>`
     <tr>
       <td style="color:var(--muted);font-weight:700;">${u.id}</td>
       <td style="font-weight:700;">${u.nombre}</td>
@@ -103,7 +117,7 @@ async function loadUsers() {
       <td style="font-size:.82rem;color:var(--muted);">${u.correo}</td>
       <td><span class="status-pill ${u.estado==='Activo'?'active':'inactive'}"><span class="dot" style="background:${u.estado==='Activo'?'var(--green)':'var(--muted)'}"></span>${u.estado}</span></td>
       <td>
-        <button class="act-btn act-edit" onclick="editUser(${u.id},'${u.nombre}','${u.usuario}','${u.correo}','${u.rol}','${u.estado}')" title="Editar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>
+        <button class="act-btn act-edit" onclick="editUser(${u.id})" title="Editar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>
         <button class="act-btn act-delete" onclick="askDelete(${u.id})" title="Eliminar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></button>
       </td>
     </tr>`).join('') || '<tr><td colspan="7" style="text-align:center;padding:2rem;color:var(--muted);">Sin resultados</td></tr>';
@@ -116,23 +130,47 @@ function clearFilters(){document.getElementById('searchInput').value='';document
 
 document.getElementById('btnNuevo').addEventListener('click',()=>{
   editingId=null;document.getElementById('modalTitle').textContent='Nuevo usuario';
-  ['fNombre','fUsuario','fCorreo','fPass'].forEach(f=>document.getElementById(f).value='');
+  ['fNombre','fApellidoPaterno','fApellidoMaterno','fUsuario','fCorreo','fPass','fCP','fDireccion','fDescripcion'].forEach(f=>document.getElementById(f).value='');
   document.getElementById('fRol').value='Vendedor';document.getElementById('fEstado').value='Activo';
+  if(sucursalesData.length) document.getElementById('fSucursal').value=sucursalesData[0].id;
   openModal('modalUser');
 });
 
-function editUser(id,nombre,usuario,correo,rol,estado){
+function editUser(id){
+  const u=usersData.find(x=>x.id===id);
+  if(!u) return;
   editingId=id;document.getElementById('modalTitle').textContent='Editar usuario';
-  document.getElementById('fNombre').value=nombre;document.getElementById('fUsuario').value=usuario;
-  document.getElementById('fCorreo').value=correo;document.getElementById('fPass').value='';
-  document.getElementById('fRol').value=rol;document.getElementById('fEstado').value=estado;
+  document.getElementById('fNombre').value=u.nombre_solo||'';
+  document.getElementById('fApellidoPaterno').value=u.apellidopaterno||'';
+  document.getElementById('fApellidoMaterno').value=u.apellidomaterno||'';
+  document.getElementById('fUsuario').value=u.usuario||'';
+  document.getElementById('fCorreo').value=u.correo||'';
+  document.getElementById('fPass').value='';
+  document.getElementById('fRol').value=u.rol;
+  document.getElementById('fEstado').value=u.estado;
+  document.getElementById('fCP').value=u.codigopostal||'';
+  document.getElementById('fDireccion').value=u.direccion||'';
+  document.getElementById('fDescripcion').value=u.descripcion||'';
+  if(u.surcursal_id) document.getElementById('fSucursal').value=u.surcursal_id;
   openModal('modalUser');
 }
 
 async function saveUser(){
-  const body={nombre:document.getElementById('fNombre').value.trim(),usuario:document.getElementById('fUsuario').value.trim(),correo:document.getElementById('fCorreo').value.trim(),rol:document.getElementById('fRol').value,estado:document.getElementById('fEstado').value};
+  const body={
+    nombre:document.getElementById('fNombre').value.trim(),
+    apellidopaterno:document.getElementById('fApellidoPaterno').value.trim(),
+    apellidomaterno:document.getElementById('fApellidoMaterno').value.trim(),
+    usuario:document.getElementById('fUsuario').value.trim(),
+    correo:document.getElementById('fCorreo').value.trim(),
+    rol:document.getElementById('fRol').value,
+    estado:document.getElementById('fEstado').value,
+    codigopostal:document.getElementById('fCP').value.trim(),
+    direccion:document.getElementById('fDireccion').value.trim(),
+    descripcion:document.getElementById('fDescripcion').value.trim(),
+    surcursal_id:Number(document.getElementById('fSucursal').value)||null
+  };
   const pass=document.getElementById('fPass').value;if(pass)body.password=pass;
-  if(!body.nombre||!body.usuario||!body.correo){showToast('Completa los campos requeridos','error');return;}
+  if(!body.nombre||!body.apellidopaterno||!body.usuario||!body.correo){showToast('Completa los campos requeridos','error');return;}
   if(!editingId&&!pass){showToast('La contraseña es requerida para nuevos usuarios','error');return;}
   const data=await apiFetch(editingId?`/usuarios/${editingId}`:`/usuarios`,{method:editingId?'PUT':'POST',body:JSON.stringify(body)});
   if(!data)return;
@@ -150,6 +188,7 @@ async function confirmDelete(){
 }
 
 document.addEventListener('keydown',e=>{if(e.key==='Escape')['modalUser','modalConfirm'].forEach(closeModal);});
+loadSucursales();
 loadUsers();
 </script>
 </body></html>

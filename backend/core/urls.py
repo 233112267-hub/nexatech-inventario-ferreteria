@@ -20,7 +20,9 @@ urlpatterns = [
 
     # ── Usuarios (usuarios.html) ─────────────────────────────
     path('api/usuarios/', views.usuarios_view),
+    path('api/usuarios/vendedores/', views.usuarios_vendedores_view),
     path('api/usuarios/<int:empcve>/', views.usuario_detail_view),
+    path('api/sucursales/', views.sucursales_view),
 
     # ── Clientes ──────────────────────────────────────────────
     path('api/clientes/crear/', views.crear_cliente_view),
@@ -34,8 +36,8 @@ urlpatterns = [
 
     # ── Alertas ───────────────────────────────────────────────
     path('api/alertas/', views.alertas_view),
-    path('api/alertas/<int:alertcve>/notificar', views.alerta_notificar_view),
-    path('api/alertas/<int:alertcve>/resolver', views.alerta_resolver_view),
+    path('api/alertas/<int:alertcve>/notificar/', views.alerta_notificar_view),
+    path('api/alertas/<int:alertcve>/resolver/', views.alerta_resolver_view),
 
     #  Movimientos de inventario (Admin + Vendedor) ─────────
     path('api/movimientos/', views.movimientos_view),
