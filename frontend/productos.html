@@ -114,6 +114,15 @@
 <script src="shared.js"></script>
 <script>
 checkAuth(); setupLogout(); renderUserInfo();
+
+// ── Control de permisos por rol ──────────────────────────────
+const usuarioActual = JSON.parse(localStorage.getItem('user') || '{}');
+const esAdmin = usuarioActual.rol === 'Administrador';
+if (!esAdmin) {
+  document.getElementById('btnNuevo').style.display = 'none';
+  document.querySelector('.cat-add').style.display = 'none'; // tampoco puede crear categorías
+}
+
 const EMOJIS={Herramientas:'🔧',Ferretería:'🪛',Materiales:'🧱',Pintura:'🎨',Eléctricos:'⚡',Plomería:'🚿',Seguridad:'🧤'};
 const CAT_CLS={Herramientas:'cat-h',Ferretería:'cat-f',Materiales:'cat-m',Pintura:'cat-p',Eléctricos:'cat-e',Plomería:'cat-pl',Seguridad:'cat-s'};
 let currentPage=1, editingId=null, deleteId=null, activeCat='', catsData=[];
@@ -155,8 +164,10 @@ async function loadProds() {
       <td style="font-weight:700;color:var(--muted);">${p.stock}</td>
       <td>${p.estado==='Activo'?'<span class="status-pill active"><span class="dot"></span>Activo</span>':'<span class="status-pill inactive"><span class="dot" style="background:var(--muted)"></span>Inactivo</span>'}</td>
       <td>
+        ${esAdmin ? `
         <button class="act-btn act-edit" onclick="editProd(${p.id},'${p.nombre.replace(/'/g,"\\'")}','${p.codigo}',${p.categoria_id||'null'},'${p.precio}',${p.stock},${p.stock_minimo},'${p.estado}','${(p.descripcion||'').replace(/'/g,"\\'")}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>
         <button class="act-btn act-delete" onclick="askDelete(${p.id})"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg></button>
+        ` : `<span style="color:var(--muted);font-size:.78rem;">Solo lectura</span>`}
       </td>
     </tr>`).join('')||'<tr><td colspan="8" style="text-align:center;padding:2rem;color:var(--muted);">Sin productos</td></tr>';
   renderPagination('paginationBtns','paginationInfo',currentPage,data.total,8,`(p)=>{currentPage=p;loadProds();}`);

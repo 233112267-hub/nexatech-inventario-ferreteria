@@ -251,6 +251,7 @@ btn.addEventListener('click', async () => {
       localStorage.setItem('token', data.token);
       localStorage.setItem('tipo', data.tipo);
       localStorage.setItem('rol', data.rol);
+      localStorage.setItem('user', JSON.stringify({ usuario: user, rol: data.rol }));
       window.location.href = 'dashboard.html';
     } else {
       // Error: Django devuelve { error: "..." }

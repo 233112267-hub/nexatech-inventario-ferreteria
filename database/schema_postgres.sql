@@ -798,3 +798,32 @@ SET password = crypt('Password123!', gen_salt('bf', 10));
 
 UPDATE cliente
 SET password = crypt('Password123!', gen_salt('bf', 10));
+
+
+-- ============================================================
+-- Migración: tabla 'alerta' (persistida, con estado)
+-- ============================================================
+-- No modifica ninguna tabla existente ni el diagrama ER original.
+-- Correr esto una sola vez contra la base de datos (Neon / psql).
+--
+-- Ciclo de vida de una alerta:
+--   Pendiente   -> se creó porque un producto quedó en stock bajo o agotado
+--   Notificada  -> el Administrador mandó el correo de aviso (sp API externa)
+--   Resuelta    -> el Administrador reabasteció el producto (sp_abastecer_stock)
+--
+-- El backend (core/views.py) es quien decide cuándo crear filas Pendiente,
+-- cuándo pasarlas a Notificada y cuándo pasarlas a Resuelta.
+
+CREATE TABLE IF NOT EXISTS alerta (
+    alertcve            SERIAL PRIMARY KEY,
+    procve              INT NOT NULL REFERENCES producto(procve),
+    tipo                VARCHAR(20) NOT NULL CHECK (tipo IN ('Crítica','Advertencia')),
+    estado              VARCHAR(20) NOT NULL DEFAULT 'Pendiente' CHECK (estado IN ('Pendiente','Notificada','Resuelta')),
+    descripcion         VARCHAR(200),
+    fecha_creacion      TIMESTAMP NOT NULL DEFAULT now(),
+    fecha_notificacion  TIMESTAMP,
+    fecha_resolucion    TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_alerta_procve ON alerta(procve);
+CREATE INDEX IF NOT EXISTS idx_alerta_estado ON alerta(estado);

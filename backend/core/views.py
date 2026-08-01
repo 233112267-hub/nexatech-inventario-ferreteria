@@ -970,17 +970,37 @@ def alertas_view(request):
     return JsonResponse({"ok": True, "data": data})
 
 # /categorias con conteo — para la dona de "Productos por categoría":
-@require_GET
+@csrf_exempt
+@require_http_methods(["GET", "POST"])
 @requiere_rol("Administrador", "Vendedor", "Almacenista")
 def categorias_con_conteo_view(request):
-    categorias = Categoria.objects.filter(estatus="activo").annotate(
-        total_productos=Count("producto", filter=Q(producto__estatus="activo"))
-    )
-    data = [
-        {"catcve": c.catcve, "nombre": c.nombre, "total_productos": c.total_productos}
-        for c in categorias
-    ]
-    return JsonResponse({"ok": True, "data": data})
+    if request.method == "GET":
+        categorias = Categoria.objects.filter(estatus="activo").annotate(
+            total_productos=Count("producto", filter=Q(producto__estatus="activo"))
+        )
+        data = [
+            {"id": c.catcve, "nombre": c.nombre, "total_productos": c.total_productos}
+            for c in categorias
+        ]
+        return JsonResponse({"ok": True, "data": data})
+
+    # POST — solo Administrador
+    if request.usuario_jwt.get("rol") != "Administrador":
+        return JsonResponse({"ok": False, "message": "No tienes permiso para crear categorías"}, status=403)
+
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({"ok": False, "message": "JSON inválido"}, status=400)
+
+    nombre = data.get("nombre", "").strip()
+    if not nombre:
+        return JsonResponse({"ok": False, "message": "El nombre es obligatorio"}, status=400)
+    if Categoria.objects.filter(nombre__iexact=nombre).exists():
+        return JsonResponse({"ok": False, "message": "Ya existe una categoría con ese nombre"}, status=400)
+
+    categoria = Categoria.objects.create(nombre=nombre)
+    return JsonResponse({"ok": True, "data": {"id": categoria.catcve, "nombre": categoria.nombre}})
 
 # /productos/mas-vendidos/ — lista de productos más vendidos:
 @require_GET
@@ -1002,3 +1022,299 @@ def productos_mas_vendidos_view(request):
     ]
 
     return JsonResponse({"ok": True, "data": data})
+#/usuarios con ?page=1&limit=8&search=&rol=&estado= — tabla de usuarios:
+@csrf_exempt
+@require_http_methods(["GET", "POST"])
+@requiere_rol("Administrador")
+def usuarios_view(request):
+    if request.method == "GET":
+        page = int(request.GET.get("page", 1))
+        limit = int(request.GET.get("limit", 8))
+        search = request.GET.get("search", "").strip()
+        rol = request.GET.get("rol", "").strip()
+        estado = request.GET.get("estado", "").strip()
+
+        qs = Empleado.objects.all()
+
+        if search:
+            qs = qs.filter(
+                Q(nombre__icontains=search) |
+                Q(apellidopaterno__icontains=search) |
+                Q(username__icontains=search) |
+                Q(email__icontains=search)
+            )
+        if rol:
+            qs = qs.filter(rol=rol)
+        if estado:
+            qs = qs.filter(estatus=estado.lower())
+
+        total = qs.count()
+        start = (page - 1) * limit
+        empleados = qs.order_by("empcve")[start:start + limit]
+
+        data = [
+            {
+                "id": e.empcve,
+                "nombre": f"{e.nombre} {e.apellidopaterno}".strip(),
+                "usuario": e.username,
+                "correo": e.email,
+                "rol": e.rol,
+                "estado": e.estatus.capitalize(),
+            }
+            for e in empleados
+        ]
+        return JsonResponse({"ok": True, "data": data, "total": total})
+
+    # POST: crear usuario
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({"ok": False, "message": "JSON inválido"}, status=400)
+
+    nombre_completo = data.get("nombre", "").strip()
+    usuario = data.get("usuario", "").strip()
+    correo = data.get("correo", "").strip()
+    password = data.get("password", "")
+    rol = data.get("rol", "Vendedor")
+    estado = data.get("estado", "Activo")
+
+    if not all([nombre_completo, usuario, correo, password]):
+        return JsonResponse({"ok": False, "message": "Faltan campos obligatorios"}, status=400)
+
+    if rol not in ("Administrador", "Vendedor", "Almacenista"):
+        return JsonResponse({"ok": False, "message": "Rol inválido"}, status=400)
+
+    partes = nombre_completo.split(" ", 1)
+    nombre = partes[0]
+    apellidopaterno = partes[1] if len(partes) > 1 else "-"
+
+    if Empleado.objects.filter(username=usuario).exists():
+        return JsonResponse({"ok": False, "message": "El usuario ya está en uso"}, status=400)
+    if Empleado.objects.filter(email=correo).exists():
+        return JsonResponse({"ok": False, "message": "El correo ya está en uso"}, status=400)
+
+    try:
+        sucursal = Surcusal.objects.get(surcve=1)
+    except Surcusal.DoesNotExist:
+        return JsonResponse({"ok": False, "message": "No hay sucursal configurada por defecto"}, status=400)
+
+    password_hash = bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt(10)).decode("utf-8")
+
+    empleado = Empleado.objects.create(
+        surcve=sucursal,
+        nombre=nombre,
+        apellidopaterno=apellidopaterno,
+        rol=rol,
+        username=usuario,
+        email=correo,
+        password=password_hash,
+        estatus=estado.lower(),
+    )
+
+    return JsonResponse({"ok": True, "data": {"id": empleado.empcve}})
+
+
+@csrf_exempt
+@require_http_methods(["PUT", "DELETE"])
+@requiere_rol("Administrador")
+def usuario_detail_view(request, empcve):
+    try:
+        empleado = Empleado.objects.get(empcve=empcve)
+    except Empleado.DoesNotExist:
+        return JsonResponse({"ok": False, "message": "Usuario no encontrado"}, status=404)
+
+    if request.method == "DELETE":
+        empleado.estatus = "inactivo"
+        empleado.save()
+        return JsonResponse({"ok": True})
+
+    # PUT: actualizar
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({"ok": False, "message": "JSON inválido"}, status=400)
+
+    nombre_completo = data.get("nombre", "").strip()
+    if nombre_completo:
+        partes = nombre_completo.split(" ", 1)
+        empleado.nombre = partes[0]
+        empleado.apellidopaterno = partes[1] if len(partes) > 1 else "-"
+
+    if data.get("usuario"):
+        nuevo_usuario = data["usuario"].strip()
+        if Empleado.objects.exclude(empcve=empcve).filter(username=nuevo_usuario).exists():
+            return JsonResponse({"ok": False, "message": "El usuario ya está en uso"}, status=400)
+        empleado.username = nuevo_usuario
+
+    if data.get("correo"):
+        nuevo_correo = data["correo"].strip()
+        if Empleado.objects.exclude(empcve=empcve).filter(email=nuevo_correo).exists():
+            return JsonResponse({"ok": False, "message": "El correo ya está en uso"}, status=400)
+        empleado.email = nuevo_correo
+
+    if data.get("rol"):
+        if data["rol"] not in ("Administrador", "Vendedor", "Almacenista"):
+            return JsonResponse({"ok": False, "message": "Rol inválido"}, status=400)
+        empleado.rol = data["rol"]
+
+    if data.get("estado"):
+        empleado.estatus = data["estado"].lower()
+
+    if data.get("password"):
+        empleado.password = bcrypt.hashpw(data["password"].encode("utf-8"), bcrypt.gensalt(10)).decode("utf-8")
+
+    empleado.save()
+    return JsonResponse({"ok": True})
+
+#/productos con ?page=1&limit=8&search=&categoria=&estado= — tabla de productos:
+@csrf_exempt
+@require_http_methods(["GET", "POST"])
+@requiere_rol("Administrador", "Vendedor", "Almacenista")
+def productos_ui_view(request):
+    if request.method == "GET":
+        # GET: cualquiera de los 3 roles puede ver el listado
+        page = int(request.GET.get("page", 1))
+        limit = int(request.GET.get("limit", 8))
+        search = request.GET.get("search", "").strip()
+        categoria = request.GET.get("categoria", "").strip()
+        estado = request.GET.get("estado", "").strip()
+
+        qs = Producto.objects.select_related("catcve")
+
+        if search:
+            qs = qs.filter(Q(nombre__icontains=search) | Q(modelo__icontains=search))
+        if categoria:
+            qs = qs.filter(catcve__nombre=categoria)
+        if estado:
+            qs = qs.filter(estatus=estado.lower())
+
+        total = qs.count()
+        start = (page - 1) * limit
+        productos = qs.order_by("procve")[start:start + limit]
+
+        stocks = {s.procve_id: s for s in Stock.objects.filter(procve__in=productos)}
+
+        data = []
+        for p in productos:
+            s = stocks.get(p.procve)
+            data.append({
+                "id": p.procve,
+                "codigo": p.modelo or f"PROD-{p.procve:04d}",
+                "nombre": p.nombre,
+                "categoria": p.catcve.nombre if p.catcve else None,
+                "categoria_id": p.catcve_id,
+                "precio": float(p.precio),
+                "stock": s.stock_actual if s else 0,
+                "stock_minimo": s.stock_minimo if s else 0,
+                "estado": p.estatus.capitalize(),
+                "descripcion": p.descripcion,
+            })
+        return JsonResponse({"ok": True, "data": data, "total": total})
+
+    # POST: crear producto — SOLO Administrador
+    if request.usuario_jwt.get("rol") != "Administrador":
+        return JsonResponse({"ok": False, "message": "No tienes permiso para crear productos"}, status=403)
+
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({"ok": False, "message": "JSON inválido"}, status=400)
+    nombre = data.get("nombre", "").strip()
+    codigo = data.get("codigo", "").strip()
+    categoria_id = data.get("categoria_id")
+    precio = data.get("precio")
+    stock_inicial = data.get("stock", 0)
+    stock_minimo = data.get("stock_minimo", 5)
+    estado = data.get("estado", "Activo")
+    descripcion = data.get("descripcion", "")
+
+    if not nombre or not codigo or not categoria_id or precio is None:
+        return JsonResponse({"ok": False, "message": "Nombre, código, categoría y precio son obligatorios"}, status=400)
+
+    try:
+        precio = float(precio)
+        if precio <= 0:
+            raise ValueError
+    except (TypeError, ValueError):
+        return JsonResponse({"ok": False, "message": "El precio debe ser un número mayor a 0"}, status=400)
+
+    try:
+        categoria = Categoria.objects.get(catcve=categoria_id)
+    except Categoria.DoesNotExist:
+        return JsonResponse({"ok": False, "message": "La categoría indicada no existe"}, status=400)
+
+    producto = Producto.objects.create(
+        catcve=categoria,
+        nombre=nombre,
+        modelo=codigo,
+        precio=precio,
+        descripcion=descripcion,
+        estatus=estado.lower(),
+    )
+
+    Stock.objects.create(
+        procve=producto,
+        stock_actual=int(stock_inicial),
+        stock_minimo=int(stock_minimo),
+        estatus="normal" if int(stock_inicial) >= int(stock_minimo) else "alerta",
+    )
+
+    return JsonResponse({"ok": True, "data": {"id": producto.procve}})
+#
+@csrf_exempt
+@require_http_methods(["PUT", "DELETE"])
+@requiere_rol("Administrador", "Vendedor", "Almacenista")  # todos entran, pero se filtra dentro
+def producto_ui_detail_view(request, procve):
+    # Solo Administrador puede editar o eliminar
+    if request.usuario_jwt.get("rol") != "Administrador":
+        return JsonResponse({"ok": False, "message": "No tienes permiso para modificar productos"}, status=403)
+
+    try:
+        producto = Producto.objects.get(procve=procve)
+    except Producto.DoesNotExist:
+        return JsonResponse({"ok": False, "message": "Producto no encontrado"}, status=404)
+
+    if request.method == "DELETE":
+        producto.estatus = "inactivo"
+        producto.save()
+        return JsonResponse({"ok": True})
+
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({"ok": False, "message": "JSON inválido"}, status=400)
+
+    if data.get("nombre"):
+        producto.nombre = data["nombre"]
+    if data.get("codigo"):
+        producto.modelo = data["codigo"]
+    if data.get("categoria_id"):
+        try:
+            producto.catcve = Categoria.objects.get(catcve=data["categoria_id"])
+        except Categoria.DoesNotExist:
+            return JsonResponse({"ok": False, "message": "La categoría indicada no existe"}, status=400)
+    if data.get("precio") is not None:
+        try:
+            precio = float(data["precio"])
+            if precio <= 0:
+                raise ValueError
+            producto.precio = precio
+        except (TypeError, ValueError):
+            return JsonResponse({"ok": False, "message": "El precio debe ser un número mayor a 0"}, status=400)
+    if "descripcion" in data:
+        producto.descripcion = data["descripcion"]
+    if data.get("estado"):
+        producto.estatus = data["estado"].lower()
+
+    producto.save()
+
+    if "stock" in data or "stock_minimo" in data:
+        stock, _ = Stock.objects.get_or_create(procve=producto, defaults={"stock_actual": 0, "stock_minimo": 5})
+        if "stock" in data:
+            stock.stock_actual = int(data["stock"])
+        if "stock_minimo" in data:
+            stock.stock_minimo = int(data["stock_minimo"])
+        stock.estatus = "alerta" if stock.stock_actual < stock.stock_minimo else "normal"
+        stock.save()
+
+    return JsonResponse({"ok": True})
