@@ -626,12 +626,17 @@ def crear_venta_view(request):
     except json.JSONDecodeError:
         return JsonResponse({"ok": False, "message": "JSON inválido"}, status=400)
 
-    empcve = data.get("empcve")
+    # El vendedor de la venta SIEMPRE es quien tiene la sesión (JWT), nunca
+    # un empcve que mande el cliente en el body: si se confiara en eso,
+    # cualquiera con las dev tools o Postman podría registrar una venta a
+    # nombre de otro empleado (o de un Administrador) con solo cambiar un
+    # número en el request. Cualquier "empcve" que venga en el body se ignora.
+    empcve = request.usuario_jwt.get("empcve")
     clicve = data.get("clicve")  # opcional, venta puede ser sin cliente registrado
     items = data.get("items")    # lista de {"procve": X, "cantidad": Y}
 
     if not empcve or not items or not isinstance(items, list) or len(items) == 0:
-        return JsonResponse({"ok": False, "message": "Faltan campos obligatorios: empcve, items (lista no vacía)"}, status=400)
+        return JsonResponse({"ok": False, "message": "Faltan campos obligatorios: items (lista no vacía)"}, status=400)
 
     try:
         empleado = Empleado.objects.get(empcve=empcve)
@@ -1301,27 +1306,6 @@ def sucursales_view(request):
     ]
     return JsonResponse({"ok": True, "data": data})
 
-#/usuarios/vendedores/ — lista liviana de empleados activos para el
-# selector de "Vendedor" en ventas.html. A diferencia de usuarios_view
-# (exclusivo Administrador), este endpoint lo puede llamar cualquier
-# empleado que registre ventas.
-@require_GET
-@requiere_rol("Administrador", "Vendedor")
-def usuarios_vendedores_view(request):
-    empleados = Empleado.objects.filter(
-        estatus="activo", rol__in=["Administrador", "Vendedor"]
-    ).order_by("nombre")
-
-    data = [
-        {
-            "id": e.empcve,
-            "nombre": f"{e.nombre} {e.apellidopaterno}".strip(),
-            "rol": e.rol,
-        }
-        for e in empleados
-    ]
-    return JsonResponse({"ok": True, "data": data})
-
 #/productos con ?page=1&limit=8&search=&categoria=&estado= — tabla de productos:
 @csrf_exempt
 @require_http_methods(["GET", "POST"])
@@ -1395,6 +1379,14 @@ def productos_ui_view(request):
         return JsonResponse({"ok": False, "message": "El precio debe ser un número mayor a 0"}, status=400)
 
     try:
+        stock_inicial = int(stock_inicial)
+        stock_minimo = int(stock_minimo)
+        if stock_inicial < 0 or stock_minimo < 0:
+            raise ValueError
+    except (TypeError, ValueError):
+        return JsonResponse({"ok": False, "message": "Stock inicial y stock mínimo deben ser un número positivo (0 o más)"}, status=400)
+
+    try:
         categoria = Categoria.objects.get(catcve=categoria_id)
     except Categoria.DoesNotExist:
         return JsonResponse({"ok": False, "message": "La categoría indicada no existe"}, status=400)
@@ -1410,9 +1402,9 @@ def productos_ui_view(request):
 
     Stock.objects.create(
         procve=producto,
-        stock_actual=int(stock_inicial),
-        stock_minimo=int(stock_minimo),
-        estatus="normal" if int(stock_inicial) >= int(stock_minimo) else "alerta",
+        stock_actual=stock_inicial,
+        stock_minimo=stock_minimo,
+        estatus="normal" if stock_inicial >= stock_minimo else "alerta",
     )
 
     return JsonResponse({"ok": True, "data": {"id": producto.procve}})
@@ -1465,11 +1457,25 @@ def producto_ui_detail_view(request, procve):
     producto.save()
 
     if "stock" in data or "stock_minimo" in data:
-        stock, _ = Stock.objects.get_or_create(procve=producto, defaults={"stock_actual": 0, "stock_minimo": 5})
-        if "stock" in data:
-            stock.stock_actual = int(data["stock"])
-        if "stock_minimo" in data:
-            stock.stock_minimo = int(data["stock_minimo"])
+        try:
+            nuevo_stock = int(data["stock"]) if "stock" in data else None
+            nuevo_minimo = int(data["stock_minimo"]) if "stock_minimo" in data else None
+            if (nuevo_stock is not None and nuevo_stock < 0) or (nuevo_minimo is not None and nuevo_minimo < 0):
+                raise ValueError
+        except (TypeError, ValueError):
+            return JsonResponse({"ok": False, "message": "Stock actual y stock mínimo deben ser un número positivo (0 o más)"}, status=400)
+
+        # .filter().first() en vez de get_or_create: si por datos viejos
+        # llegara a haber más de un registro de Stock para este producto,
+        # get_or_create truena con MultipleObjectsReturned. Tomamos el más
+        # reciente y de perdida no se cae la edición del producto.
+        stock = Stock.objects.filter(procve=producto).order_by("-stoccve").first()
+        if stock is None:
+            stock = Stock.objects.create(procve=producto, stock_actual=0, stock_minimo=5)
+        if nuevo_stock is not None:
+            stock.stock_actual = nuevo_stock
+        if nuevo_minimo is not None:
+            stock.stock_minimo = nuevo_minimo
         stock.estatus = "alerta" if stock.stock_actual < stock.stock_minimo else "normal"
         stock.save()
 
@@ -1610,7 +1616,15 @@ def _obtener_movimientos(search="", tipo_filtro=""):
             "usuario_nombre": f"{emp.nombre} {emp.apellidopaterno}".strip() if emp else None,
         })
 
-    for s in Stock.objects.select_related("procve", "procve__catcve"):
+    # .filter(procve=X) puede regresar más de un renglón de Stock por
+    # producto si la BD tiene duplicados (no hay UNIQUE en stock.procve,
+    # ver database/migracion_stock_unico.sql). Nos quedamos con la foto
+    # más reciente por producto para no repetir "Ajuste" varias veces.
+    stocks_por_producto = {}
+    for s in Stock.objects.select_related("procve", "procve__catcve").order_by("stoccve"):
+        stocks_por_producto[s.procve_id] = s  # el último de la iteración (más reciente) gana
+
+    for s in stocks_por_producto.values():
         p = s.procve
         movimientos.append({
             "tipo": "Ajuste",

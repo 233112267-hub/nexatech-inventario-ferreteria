@@ -827,3 +827,44 @@ CREATE TABLE IF NOT EXISTS alerta (
 
 CREATE INDEX IF NOT EXISTS idx_alerta_procve ON alerta(procve);
 CREATE INDEX IF NOT EXISTS idx_alerta_estado ON alerta(estado);
+
+
+-- ============================================================
+-- Migración: eliminar registros de Stock duplicados por producto
+-- ============================================================
+-- La tabla stock nunca tuvo un UNIQUE en la columna procve, así que
+-- nada impedía que un mismo producto terminara con más de un renglón
+-- de stock (por ejemplo si se creó dos veces por error, o vino así de
+-- la migración Node.js -> Django). Eso es lo que hace que en
+-- Movimientos > Ajuste veas el mismo producto repetido.
+--
+-- Este script:
+--   1) Te muestra qué productos tienen más de un renglón de Stock.
+--   2) Se queda con el renglón más reciente (mayor stoccve) de cada
+--      producto duplicado y borra los demás.
+--   3) Agrega un UNIQUE para que esto no pueda volver a pasar.
+--
+-- Revisa el resultado del paso 1 ANTES de correr el DELETE del
+-- paso 2 — si dos renglones duplicados tienen valores de stock_actual
+-- distintos, decide tú cuál es el correcto (edita el WHERE del DELETE
+-- si no quieres quedarte automáticamente con el más reciente).
+-- ============================================================
+
+-- 1) Diagnóstico: productos con más de un renglón de stock
+SELECT procve, COUNT(*) AS renglones, array_agg(stoccve ORDER BY stoccve) AS stoccve_ids,
+       array_agg(stock_actual ORDER BY stoccve) AS valores_stock_actual
+FROM stock
+GROUP BY procve
+HAVING COUNT(*) > 1;
+
+-- 2) Limpieza: por cada producto duplicado, deja solo el stoccve más
+--    reciente (el número más alto) y borra el resto.
+DELETE FROM stock s
+USING stock s2
+WHERE s.procve = s2.procve
+  AND s.stoccve < s2.stoccve;
+
+-- 3) Blindaje: evita que puedan volver a existir dos renglones de
+--    stock para el mismo producto.
+ALTER TABLE stock
+  ADD CONSTRAINT stock_procve_unique UNIQUE (procve);

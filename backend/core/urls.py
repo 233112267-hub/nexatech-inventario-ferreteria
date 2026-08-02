@@ -20,7 +20,6 @@ urlpatterns = [
 
     # ── Usuarios (usuarios.html) ─────────────────────────────
     path('api/usuarios/', views.usuarios_view),
-    path('api/usuarios/vendedores/', views.usuarios_vendedores_view),
     path('api/usuarios/<int:empcve>/', views.usuario_detail_view),
     path('api/sucursales/', views.sucursales_view),
 

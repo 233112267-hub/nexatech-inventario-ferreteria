@@ -110,7 +110,7 @@
           <div class="info-grid">
             <div class="info-field"><label>Cliente (opcional)</label><input type="text" id="saleCliente" placeholder="Nombre del cliente" style="width:100%;padding:.42rem .6rem;border:1.5px solid var(--border);border-radius:7px;font-family:'Nunito',sans-serif;font-size:.8rem;outline:none;"></div>
             <div class="info-field"><label>Método de pago</label><select id="salePago"><option>Efectivo</option><option>Tarjeta</option><option>Transferencia</option></select></div>
-            <div class="info-field"><label>Vendedor</label><select id="saleVendedor"><option value="">Auto</option></select></div>
+            <div class="info-field"><label>Vendedor</label><input type="text" id="saleVendedor" readonly style="width:100%;padding:.42rem .6rem;border:1.5px solid var(--border);border-radius:7px;font-family:'Nunito',sans-serif;font-size:.8rem;outline:none;background:var(--bg);color:var(--muted);"></div>
           </div>
           <button class="btn-finalizar" id="btnFinalizar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>Finalizar venta</button>
         </div>
@@ -162,18 +162,12 @@ async function loadProds(){
 
 document.getElementById('searchProd').addEventListener('input',()=>{prodPage=1;loadProds();});
 
-// Cargar usuarios (solo Vendedor y Administrador) para dropdown vendedor
-async function loadVendedores(){
-  const data=await apiFetch('/usuarios/vendedores/');
-  if(!data||!data.ok) return;
+// Por seguridad, el vendedor de la venta SIEMPRE es quien tiene la sesión
+// iniciada (viene del JWT en el backend). El campo es solo informativo:
+// nunca se debe poder registrar una venta a nombre de otro usuario.
+function mostrarVendedorActual(){
   const user=JSON.parse(localStorage.getItem('user')||'{}');
-  const sel=document.getElementById('saleVendedor');
-  const porRol={};
-  data.data.forEach(u=>{ (porRol[u.rol]=porRol[u.rol]||[]).push(u); });
-  const grupos=Object.keys(porRol).map(rol=>
-    `<optgroup label="${rol}">${porRol[rol].map(u=>`<option value="${u.id}" ${u.id==user.id?'selected':''}>${u.nombre}</option>`).join('')}</optgroup>`
-  ).join('');
-  sel.innerHTML='<option value="">Auto</option>'+grupos;
+  document.getElementById('saleVendedor').value=user.nombre||user.usuario||'—';
 }
 
 // Carrito
@@ -233,10 +227,8 @@ document.getElementById('btnFinalizar').addEventListener('click', async ()=>{
   if(!cart.length){showToast('Agrega al menos un producto','error');return;}
   const btn=document.getElementById('btnFinalizar');
   btn.classList.add('loading');
-  const user=JSON.parse(localStorage.getItem('user')||'{}');
   const clienteNombre=document.getElementById('saleCliente').value.trim();
   const body={
-    empcve:Number(document.getElementById('saleVendedor').value)||user.id,
     descripcion:clienteNombre?`Cliente: ${clienteNombre}`:null,
     metodo_pago:document.getElementById('salePago').value.toLowerCase(),
     items:cart.map(i=>({procve:i.id,cantidad:i.qty}))
@@ -253,7 +245,7 @@ document.getElementById('btnFinalizar').addEventListener('click', async ()=>{
 
 document.addEventListener('keydown',e=>{if(e.key==='Escape')closeModal('modalOK');});
 loadProds();
-loadVendedores();
+mostrarVendedorActual();
 </script>
 </body>
 </html>

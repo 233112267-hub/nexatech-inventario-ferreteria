@@ -123,7 +123,7 @@ class DetalleVenta(models.Model):
 #Dashboard stocks
 class Stock(models.Model):
     stoccve = models.AutoField(primary_key=True)
-    procve = models.ForeignKey(Producto, on_delete=models.DO_NOTHING, db_column='procve')
+    procve = models.ForeignKey(Producto, on_delete=models.DO_NOTHING, db_column='procve', unique=True)
     stock_actual = models.IntegerField(default=0)
     stock_minimo = models.IntegerField(default=5)
     fecha = models.DateField(auto_now_add=True)
@@ -158,4 +158,3 @@ class Alerta(models.Model):
     class Meta:
         managed = False
         db_table = 'alerta'
-        
