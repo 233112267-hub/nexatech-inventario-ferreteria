@@ -12,7 +12,30 @@ function checkAuth() {
   if (!token) { window.location.href = 'login.html'; return null; }
   enforceRoleAccess();
   applyNavRoleVisibility();
+  startAlertPolling();
   return token;
+}
+
+// ── Campanita de alertas: mismo número en TODAS las pantallas ──
+// Antes cada página traía su propio número (o de plano nunca lo
+// actualizaba, se quedaba en el "0" fijo del HTML). Centralizado aquí:
+// se llama solo, una vez al cargar cualquier página (vía checkAuth) y
+// luego cada 25s, así que aunque no sea un WebSocket real, el número
+// se refresca solo sin que el usuario tenga que recargar la página.
+let _alertPollInterval = null;
+async function refreshAlertBadge() {
+  const data = await apiFetch('/dashboard/stats');
+  if (!data || !data.ok) return;
+  const n = data.data.alertasPendientes ?? 0;
+  const badge = document.getElementById('alertBadge');
+  const dot = document.getElementById('alertDot');
+  if (badge) badge.textContent = n;
+  if (dot) dot.textContent = n;
+}
+function startAlertPolling() {
+  refreshAlertBadge();
+  if (_alertPollInterval) clearInterval(_alertPollInterval);
+  _alertPollInterval = setInterval(refreshAlertBadge, 25000);
 }
 
 // ── Control de acceso por rol (páginas completas) ────────────

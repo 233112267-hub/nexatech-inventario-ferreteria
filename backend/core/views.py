@@ -16,7 +16,7 @@ from .models import Empleado, Cliente, Producto, Categoria, Surcusal, Venta, Det
 from .models import Empleado, Cliente, Producto, Categoria, Surcusal
 from .jwt_utils import generar_jwt
 #vista de modelo
-from django.db.models import Sum, Count, Q
+from django.db.models import Sum, Count, Q, F
 from datetime import date, timedelta
 from .models import Stock, Alerta
 
@@ -865,11 +865,68 @@ def reset_password_view(request):
     usuario.save()
 
     return JsonResponse({"ok": True})
+
+# ── Helpers de alertas de stock (usados por dashboard, inventario, ──
+# productos y alertas.html) ──────────────────────────────────────
+def _evaluar_alerta_tipo(stock_actual, stock_minimo):
+    """
+    Regla única para decidir si un nivel de stock amerita alerta:
+      - Agotado (stock_actual == 0) => SIEMPRE 'Crítica', sin importar
+        cuál sea el stock_minimo (antes, si stock_minimo también era 0,
+        "0 < 0" daba False y el producto agotado no generaba alerta).
+      - Bajo mínimo (0 < stock_actual < stock_minimo) => 'Advertencia'.
+      - Cualquier otro caso => None (no amerita alerta).
+    """
+    if stock_actual == 0:
+        return "Crítica"
+    if stock_actual < stock_minimo:
+        return "Advertencia"
+    return None
+
+
+def _sincronizar_alertas():
+    """
+    Recorre el stock de todos los productos y deja la tabla Alerta al
+    corriente:
+      - Si un producto amerita alerta (agotado o bajo mínimo) y no tiene
+        ya una alerta abierta (Pendiente/Notificada) de ese mismo tipo,
+        crea una nueva alerta Pendiente.
+      - Si un producto tenía una alerta abierta de OTRO tipo (ej. pasó de
+        Advertencia a Crítica al venderse más), cierra la vieja como
+        Resuelta y abre una nueva del tipo correcto.
+      - Si un producto ya no amerita alerta (se reabasteció por fuera del
+        flujo normal, por ejemplo editando el stock a mano) y le había
+        quedado una alerta abierta, la cierra sola como Resuelta.
+    No duplica notificaciones: solo crea/cierra registros, nunca reenvía
+    el correo (eso solo pasa cuando alguien aprieta "Notificar").
+    """
+    for s in Stock.objects.select_related("procve"):
+        tipo_actual = _evaluar_alerta_tipo(s.stock_actual, s.stock_minimo)
+        abiertas = Alerta.objects.filter(procve=s.procve, estado__in=["Pendiente", "Notificada"])
+
+        if tipo_actual is None:
+            if abiertas.exists():
+                abiertas.update(estado="Resuelta", fecha_resolucion=timezone.now())
+            continue
+
+        if abiertas.filter(tipo=tipo_actual).exists():
+            continue  # ya hay una alerta abierta correcta para este producto
+
+        abiertas.exclude(tipo=tipo_actual).update(estado="Resuelta", fecha_resolucion=timezone.now())
+        Alerta.objects.create(
+            procve=s.procve,
+            tipo=tipo_actual,
+            estado="Pendiente",
+            descripcion=f"Quedan {s.stock_actual} unidades (mínimo {s.stock_minimo})",
+        )
+
 #stock bajo, ventas del mes, total de productos, total de usuarios
 #/dashboard/stats  las 4 tarjetas de arriba:
 @require_GET
 @requiere_rol("Administrador", "Vendedor")
 def dashboard_stats_view(request):
+    _sincronizar_alertas()
+
     total_productos = Producto.objects.filter(estatus="activo").count()
 
     hoy = date.today()
@@ -877,8 +934,12 @@ def dashboard_stats_view(request):
     ventas_mes_total = ventas_mes.aggregate(suma=Sum("total"))["suma"] or 0
     ventas_mes_count = ventas_mes.count()
 
-    stock_bajo = Stock.objects.filter(estatus="alerta", stock_actual__gt=0).count()
+    stock_bajo = Stock.objects.filter(stock_actual__gt=0, stock_actual__lt=F("stock_minimo")).count()
     agotados = Stock.objects.filter(stock_actual=0).count()
+    # Mismo número que va a ver el usuario en la campanita en TODAS las
+    # pantallas y en la tabla de alertas.html: alertas abiertas (Pendiente
+    # o Notificada) en la tabla real, no un recálculo aparte.
+    alertas_abiertas = Alerta.objects.filter(estado__in=["Pendiente", "Notificada"]).count()
 
     total_usuarios = Empleado.objects.filter(estatus="activo").count()
 
@@ -888,7 +949,7 @@ def dashboard_stats_view(request):
             "totalProductos": total_productos,
             "ventasMes": float(ventas_mes_total),
             "totalVentasMes": ventas_mes_count,
-            "alertasPendientes": stock_bajo + agotados,
+            "alertasPendientes": alertas_abiertas,
             "stockBajo": stock_bajo,
             "agotados": agotados,
             "totalUsuarios": total_usuarios,
@@ -913,7 +974,11 @@ def ventas_semana_view(request):
 @require_GET
 @requiere_rol("Administrador", "Vendedor")
 def stock_bajo_view(request):
-    stocks = Stock.objects.filter(estatus="alerta").select_related("procve").order_by("stock_actual")
+    stocks = (
+        Stock.objects.filter(Q(stock_actual=0) | Q(stock_actual__lt=F("stock_minimo")))
+        .select_related("procve")
+        .order_by("stock_actual")
+    )
 
     data = [
         {"nombre": s.procve.nombre, "stock": s.stock_actual, "stock_minimo": s.stock_minimo}
@@ -939,23 +1004,48 @@ def ventas_recientes_view(request):
     ]
     return JsonResponse({"ok": True, "data": data})
 
-#/alertas con ?estado=Pendiente&limit= — lista de alertas:
+#/alertas con ?page=&limit=&tipo=&estado=&search= — lista de alertas.
+# A diferencia de antes, esto SÍ lee y escribe la tabla Alerta real (antes
+# se recalculaba al vuelo desde Stock y nunca se guardaba nada, por lo que
+# nunca había un "id" para poder notificar o resolver una alerta, ni un
+# historial real de Resueltas).
 @require_GET
 @requiere_rol("Administrador", "Vendedor")
 def alertas_view(request):
-    limit = int(request.GET.get("limit", 10))
-    stocks = Stock.objects.filter(estatus="alerta").select_related("procve").order_by("stock_actual")[:limit]
+    _sincronizar_alertas()
 
-    data = []
-    for s in stocks:
-        critica = s.stock_actual == 0
-        data.append({
-            "tipo": "Crítica" if critica else "Advertencia",
-            "nombre": "Sin stock" if critica else "Stock bajo",
-            "producto_nombre": s.procve.nombre,
-            "descripcion": f"Quedan {s.stock_actual} unidades (mínimo {s.stock_minimo})",
-        })
-    return JsonResponse({"ok": True, "data": data})
+    page = int(request.GET.get("page", 1))
+    limit = int(request.GET.get("limit", 10))
+    tipo = request.GET.get("tipo", "").strip()
+    estado = request.GET.get("estado", "").strip()
+    search = request.GET.get("search", "").strip()
+
+    qs = Alerta.objects.select_related("procve")
+    if tipo:
+        qs = qs.filter(tipo=tipo)
+    if estado:
+        qs = qs.filter(estado=estado)
+    if search:
+        qs = qs.filter(procve__nombre__icontains=search)
+
+    qs = qs.order_by("-fecha_creacion")
+    total = qs.count()
+    start = (page - 1) * limit
+    alertas = qs[start:start + limit]
+
+    data = [
+        {
+            "id": a.alertcve,
+            "created_at": a.fecha_creacion,
+            "tipo": a.tipo,
+            "nombre": "Sin stock" if a.tipo == "Crítica" else "Stock bajo",
+            "producto_nombre": a.procve.nombre if a.procve else None,
+            "descripcion": a.descripcion,
+            "estado": a.estado,
+        }
+        for a in alertas
+    ]
+    return JsonResponse({"ok": True, "data": data, "total": total})
 
 
 # /alertas/<id>/notificar — envía el correo de aviso (API externa: Gmail SMTP
@@ -1391,6 +1481,9 @@ def productos_ui_view(request):
     except Categoria.DoesNotExist:
         return JsonResponse({"ok": False, "message": "La categoría indicada no existe"}, status=400)
 
+    if Producto.objects.filter(modelo__iexact=codigo).exists():
+        return JsonResponse({"ok": False, "message": f"Ya existe un producto con el código '{codigo}'"}, status=400)
+
     producto = Producto.objects.create(
         catcve=categoria,
         nombre=nombre,
@@ -1404,7 +1497,7 @@ def productos_ui_view(request):
         procve=producto,
         stock_actual=stock_inicial,
         stock_minimo=stock_minimo,
-        estatus="normal" if stock_inicial >= stock_minimo else "alerta",
+        estatus="alerta" if _evaluar_alerta_tipo(stock_inicial, stock_minimo) else "normal",
     )
 
     return JsonResponse({"ok": True, "data": {"id": producto.procve}})
@@ -1435,7 +1528,10 @@ def producto_ui_detail_view(request, procve):
     if data.get("nombre"):
         producto.nombre = data["nombre"]
     if data.get("codigo"):
-        producto.modelo = data["codigo"]
+        nuevo_codigo = data["codigo"]
+        if Producto.objects.exclude(procve=procve).filter(modelo__iexact=nuevo_codigo).exists():
+            return JsonResponse({"ok": False, "message": f"Ya existe un producto con el código '{nuevo_codigo}'"}, status=400)
+        producto.modelo = nuevo_codigo
     if data.get("categoria_id"):
         try:
             producto.catcve = Categoria.objects.get(catcve=data["categoria_id"])
@@ -1476,7 +1572,7 @@ def producto_ui_detail_view(request, procve):
             stock.stock_actual = nuevo_stock
         if nuevo_minimo is not None:
             stock.stock_minimo = nuevo_minimo
-        stock.estatus = "alerta" if stock.stock_actual < stock.stock_minimo else "normal"
+        stock.estatus = "alerta" if _evaluar_alerta_tipo(stock.stock_actual, stock.stock_minimo) else "normal"
         stock.save()
 
     return JsonResponse({"ok": True})
@@ -1532,7 +1628,10 @@ def reportes_view(request):
         return JsonResponse({"ok": True, "tipo": tipo, "data": data, "total": len(data)})
 
     if tipo == "stock-bajo":
-        stocks = Stock.objects.filter(estatus="alerta").select_related("procve").order_by("stock_actual")[:limit]
+        stocks = (
+            Stock.objects.filter(Q(stock_actual=0) | Q(stock_actual__lt=F("stock_minimo")))
+            .select_related("procve").order_by("stock_actual")[:limit]
+        )
         data = [
             {"nombre": s.procve.nombre, "stock": s.stock_actual, "stock_minimo": s.stock_minimo}
             for s in stocks
@@ -1549,7 +1648,7 @@ def reportes_view(request):
     ventas_mes_total = ventas_mes.aggregate(suma=Sum("total"))["suma"] or 0
     ventas_mes_count = ventas_mes.count()
     total_productos = Producto.objects.filter(estatus="activo").count()
-    stock_bajo = Stock.objects.filter(estatus="alerta", stock_actual__gt=0).count()
+    stock_bajo = Stock.objects.filter(stock_actual__gt=0, stock_actual__lt=F("stock_minimo")).count()
     agotados = Stock.objects.filter(stock_actual=0).count()
 
     return JsonResponse({

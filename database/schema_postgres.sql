@@ -868,3 +868,135 @@ WHERE s.procve = s2.procve
 --    stock para el mismo producto.
 ALTER TABLE stock
   ADD CONSTRAINT stock_procve_unique UNIQUE (procve);
+  
+  
+-- ============================================================
+-- Migración: alertas reales + limpieza de productos duplicados
+-- ============================================================
+-- Corre esto en el SQL Editor de Neon. Si todavía no corriste
+-- migracion_stock_unico.sql, córrela primero (limpia duplicados de
+-- Stock por producto). Esta migración limpia duplicados de PRODUCTO
+-- (renglones distintos con el mismo código, ej. varios "Tornillos"
+-- PROD-678), y corrige el bug de las funciones sp_disminuir_stock /
+-- sp_abastecer_stock: antes, un producto agotado (stock_actual = 0)
+-- con stock_minimo también en 0 NO se marcaba como alerta, porque
+-- "0 < 0" es falso. Ahora agotado siempre es alerta, sin importar el
+-- mínimo.
+-- ============================================================
+ 
+-- 1) Diagnóstico: productos con el mismo código (mismo modelo)
+SELECT modelo, COUNT(*) AS renglones, array_agg(procve ORDER BY procve) AS procve_ids
+FROM producto
+WHERE modelo IS NOT NULL
+GROUP BY modelo
+HAVING COUNT(*) > 1;
+ 
+-- 2) Limpieza: por cada código duplicado, borra el/los producto(s) más
+--    viejos y deja solo el procve más reciente. OJO: esto también borra
+--    su renglón de stock (por la referencia). Si alguno de los
+--    duplicados ya tiene ventas asociadas (detalle_venta), este DELETE
+--    va a fallar por la llave foránea — en ese caso avísame cuál procve
+--    es y lo resolvemos manualmente en vez de borrarlo a ciegas.
+DELETE FROM stock
+WHERE procve IN (
+    SELECT p.procve
+    FROM producto p
+    JOIN (
+        SELECT modelo, MAX(procve) AS procve_mas_reciente
+        FROM producto
+        WHERE modelo IS NOT NULL
+        GROUP BY modelo
+        HAVING COUNT(*) > 1
+    ) dup ON dup.modelo = p.modelo
+    WHERE p.procve <> dup.procve_mas_reciente
+);
+ 
+DELETE FROM producto p
+USING (
+    SELECT modelo, MAX(procve) AS procve_mas_reciente
+    FROM producto
+    WHERE modelo IS NOT NULL
+    GROUP BY modelo
+    HAVING COUNT(*) > 1
+) dup
+WHERE p.modelo = dup.modelo
+  AND p.procve <> dup.procve_mas_reciente;
+ 
+-- 3) Blindaje: nunca más dos productos con el mismo código
+ALTER TABLE producto
+  ADD CONSTRAINT producto_modelo_unique UNIQUE (modelo);
+ 
+-- 4) Corregir sp_disminuir_stock: agotado siempre es 'alerta'
+CREATE OR REPLACE PROCEDURE sp_disminuir_stock(p_procve INT, p_cantidad INT)
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    v_actual  INT;
+    v_minimo  INT;
+    v_nuevo   INT;
+BEGIN
+    SELECT stock_actual, stock_minimo INTO v_actual, v_minimo
+    FROM stock WHERE procve = p_procve;
+ 
+    IF NOT FOUND THEN
+        RAISE NOTICE 'No existe registro de stock para el producto %', p_procve;
+        RETURN;
+    END IF;
+ 
+    IF v_actual < p_cantidad THEN
+        RAISE EXCEPTION 'Stock insuficiente para el producto % (disponible: %, solicitado: %)', p_procve, v_actual, p_cantidad;
+    END IF;
+ 
+    v_nuevo := v_actual - p_cantidad;
+ 
+    IF v_nuevo = 0 OR v_nuevo < v_minimo THEN
+        UPDATE stock
+        SET stock_actual = v_nuevo,
+            estatus = 'alerta',
+            descripcion = 'Stock bajo el mínimo, reabastecer pronto',
+            fecha = CURRENT_DATE
+        WHERE procve = p_procve;
+    ELSE
+        UPDATE stock
+        SET stock_actual = v_nuevo,
+            estatus = 'normal',
+            descripcion = NULL,
+            fecha = CURRENT_DATE
+        WHERE procve = p_procve;
+    END IF;
+END;
+$$;
+ 
+-- 5) Corregir sp_abastecer_stock: mismo criterio
+CREATE OR REPLACE PROCEDURE sp_abastecer_stock(p_procve INT, p_cantidad INT)
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    v_actual INT;
+    v_minimo INT;
+    v_nuevo  INT;
+BEGIN
+    SELECT stock_actual, stock_minimo INTO v_actual, v_minimo
+    FROM stock WHERE procve = p_procve;
+ 
+    IF NOT FOUND THEN
+        RAISE NOTICE 'No existe registro de stock para el producto %', p_procve;
+        RETURN;
+    END IF;
+ 
+    v_nuevo := v_actual + p_cantidad;
+ 
+    IF v_nuevo = 0 OR v_nuevo < v_minimo THEN
+        UPDATE stock
+        SET stock_actual = v_nuevo,
+            estatus = 'alerta',
+            descripcion = 'Stock bajo el mínimo, reabastecer pronto',
+            fecha = CURRENT_DATE
+        WHERE procve = p_procve;
+    ELSE
+        UPDATE stock
+        SET stock_actual = v_nuevo, estatus = 'normal', descripcion = NULL, fecha = CURRENT_DATE
+        WHERE procve = p_procve;
+    END IF;
+END;
+$$;

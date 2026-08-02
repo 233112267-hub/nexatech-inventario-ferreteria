@@ -75,7 +75,7 @@ class Producto(models.Model):
     estatus = models.CharField(max_length=20, default='activo')
     precio = models.DecimalField(max_digits=10, decimal_places=2)
     fecha = models.DateField(auto_now_add=True)
-    modelo = models.CharField(max_length=50, blank=True, null=True)
+    modelo = models.CharField(max_length=50, blank=True, null=True, unique=True)
     marca = models.CharField(max_length=50, blank=True, null=True)
     informacion_adicional = models.CharField(max_length=255, blank=True, null=True)
     nombre = models.CharField(max_length=100)
