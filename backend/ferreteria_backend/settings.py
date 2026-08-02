@@ -54,6 +54,11 @@ CORS_ALLOWED_ORIGINS = [
     "http://127.0.0.1:5500",  # si usas Live Server para el frontend vanilla JS
 ]
 
+# Sin esto, el navegador bloquea que el JS del frontend lea el header
+# Content-Disposition (ahí viene el nombre del archivo) en respuestas de
+# otro origen, como las descargas de /api/reportes/inventario/.
+CORS_EXPOSE_HEADERS = ["Content-Disposition"]
+
 WSGI_APPLICATION = 'ferreteria_backend.wsgi.application'
 
 ROOT_URLCONF = 'ferreteria_backend.urls'

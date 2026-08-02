@@ -4,7 +4,20 @@ from django.shortcuts import render
 # core/views.py
 import json
 import bcrypt
-from django.http import JsonResponse
+from django.http import JsonResponse, HttpResponse
+
+# Generación de reportes descargables (Excel/PDF), 100% local — sin API
+# externa. Si truena con "No module named 'openpyxl'" o 'reportlab',
+# instálalos: pip install openpyxl reportlab
+from openpyxl import Workbook
+from openpyxl.styles import Font, PatternFill, Alignment
+from openpyxl.utils import get_column_letter
+from reportlab.lib.pagesizes import letter
+from reportlab.lib import colors
+from reportlab.lib.units import cm
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+from reportlab.lib.styles import getSampleStyleSheet
+import io
 from django.views.decorators.http import require_POST
 from django.views.decorators.http import require_GET
 from django.views.decorators.http import require_http_methods
@@ -1564,6 +1577,246 @@ def producto_ui_detail_view(request, procve):
 # y reutilizarlos aquí habría dejado un hueco (un Vendedor podría pedir
 # "reportes" llamando esas rutas compartidas directamente). Este endpoint
 # corre la misma consulta pero detrás de su propio candado de rol.
+@require_GET
+@requiere_rol("Administrador")
+def _excel_response(nombre_archivo, titulo_hoja, encabezados, filas):
+    """Arma un .xlsx a partir de una lista de encabezados y filas (listas
+    de valores, mismo orden que encabezados) y lo regresa como descarga."""
+    wb = Workbook()
+    ws = wb.active
+    ws.title = titulo_hoja[:31]  # Excel limita el nombre de hoja a 31 caracteres
+    ws.append(encabezados)
+    for col in range(1, len(encabezados) + 1):
+        celda = ws.cell(row=1, column=col)
+        celda.font = Font(bold=True, color="FFFFFF")
+        celda.fill = PatternFill(start_color="1E293B", end_color="1E293B", fill_type="solid")
+        celda.alignment = Alignment(horizontal="center")
+    for fila in filas:
+        ws.append(fila)
+    for col in range(1, len(encabezados) + 1):
+        ws.column_dimensions[get_column_letter(col)].width = 18
+
+    buffer = io.BytesIO()
+    wb.save(buffer)
+    resp = HttpResponse(
+        buffer.getvalue(),
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+    resp["Content-Disposition"] = f'attachment; filename="{nombre_archivo}.xlsx"'
+    return resp
+
+
+def _pdf_response(nombre_archivo, titulo, encabezados, filas):
+    """Arma un PDF con una tabla (mismo formato de filas que _excel_response)
+    y lo regresa como descarga."""
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=letter, topMargin=1.5 * cm, bottomMargin=1.5 * cm)
+    estilos = getSampleStyleSheet()
+    elementos = [
+        Paragraph(titulo, estilos["Title"]),
+        Paragraph(f"Generado: {timezone.now().strftime('%d/%m/%Y %H:%M')}", estilos["Normal"]),
+        Spacer(1, 12),
+    ]
+
+    tabla_data = [encabezados] + [[str(c) for c in fila] for fila in filas]
+    tabla = Table(tabla_data, repeatRows=1)
+    tabla.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1e293b")),
+        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+        ("FONTSIZE", (0, 0), (-1, -1), 8),
+        ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#cbd5e1")),
+        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#f1f5f9")]),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+    ]))
+    elementos.append(tabla)
+    doc.build(elementos)
+
+    resp = HttpResponse(buffer.getvalue(), content_type="application/pdf")
+    resp["Content-Disposition"] = f'attachment; filename="{nombre_archivo}.pdf"'
+    return resp
+
+
+def _datos_inventario_reporte():
+    """Mismos datos que reportes_view(tipo=inventario), reutilizados aquí
+    para que el Excel/PDF y el resumen en pantalla nunca se desincronicen."""
+    productos = Producto.objects.filter(estatus="activo").select_related("catcve").order_by("catcve__nombre", "nombre")
+    stocks = {s.procve_id: s for s in Stock.objects.filter(procve__in=productos)}
+    filas = []
+    for p in productos:
+        s = stocks.get(p.procve)
+        filas.append({
+            "codigo": p.modelo or f"PROD-{p.procve:04d}",
+            "nombre": p.nombre,
+            "categoria": p.catcve.nombre if p.catcve else "—",
+            "precio": float(p.precio),
+            "stock": s.stock_actual if s else 0,
+            "stock_minimo": s.stock_minimo if s else 0,
+            "estado": "Agotado" if (not s or s.stock_actual == 0) else ("Stock bajo" if s.stock_actual < s.stock_minimo else "Disponible"),
+        })
+    return filas
+
+
+# /reportes/inventario/?formato=xlsx|pdf — descarga real del reporte de
+# inventario. No usa ninguna API externa: el archivo se arma en el mismo
+# servidor con openpyxl/reportlab y se manda como descarga directa.
+@require_GET
+@requiere_rol("Administrador")
+def reporte_inventario_view(request):
+    formato = request.GET.get("formato", "xlsx").strip().lower()
+    filas = _datos_inventario_reporte()
+    fecha_str = timezone.now().strftime("%Y-%m-%d_%H%M")
+
+    if formato == "pdf":
+        buffer = io.BytesIO()
+        doc = SimpleDocTemplate(buffer, pagesize=letter, topMargin=1.5 * cm, bottomMargin=1.5 * cm)
+        estilos = getSampleStyleSheet()
+        elementos = [
+            Paragraph("Ferretería — Reporte de inventario", estilos["Title"]),
+            Paragraph(f"Generado: {timezone.now().strftime('%d/%m/%Y %H:%M')}", estilos["Normal"]),
+            Spacer(1, 12),
+        ]
+
+        encabezado = ["Código", "Producto", "Categoría", "Precio", "Stock", "Mínimo", "Estado"]
+        tabla_data = [encabezado]
+        for f in filas:
+            tabla_data.append([
+                f["codigo"], f["nombre"], f["categoria"],
+                f"${f['precio']:.2f}", str(f["stock"]), str(f["stock_minimo"]), f["estado"],
+            ])
+
+        tabla = Table(tabla_data, repeatRows=1)
+        tabla.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1e293b")),
+            ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+            ("FONTSIZE", (0, 0), (-1, -1), 8),
+            ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#cbd5e1")),
+            ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#f1f5f9")]),
+            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ]))
+        elementos.append(tabla)
+        doc.build(elementos)
+
+        resp = HttpResponse(buffer.getvalue(), content_type="application/pdf")
+        resp["Content-Disposition"] = f'attachment; filename="inventario_{fecha_str}.pdf"'
+        return resp
+
+    # formato == "xlsx" (default)
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Inventario"
+
+    encabezado = ["Código", "Producto", "Categoría", "Precio", "Stock actual", "Stock mínimo", "Estado"]
+    ws.append(encabezado)
+    for col in range(1, len(encabezado) + 1):
+        celda = ws.cell(row=1, column=col)
+        celda.font = Font(bold=True, color="FFFFFF")
+        celda.fill = PatternFill(start_color="1E293B", end_color="1E293B", fill_type="solid")
+        celda.alignment = Alignment(horizontal="center")
+
+    for f in filas:
+        ws.append([f["codigo"], f["nombre"], f["categoria"], f["precio"], f["stock"], f["stock_minimo"], f["estado"]])
+
+    for col in range(1, len(encabezado) + 1):
+        ws.column_dimensions[get_column_letter(col)].width = 18
+
+    buffer = io.BytesIO()
+    wb.save(buffer)
+
+    resp = HttpResponse(
+        buffer.getvalue(),
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+    resp["Content-Disposition"] = f'attachment; filename="inventario_{fecha_str}.xlsx"'
+    return resp
+
+
+# /reportes/ventas/?formato=xlsx|pdf — ventas del mes en curso.
+@require_GET
+@requiere_rol("Administrador")
+def reporte_ventas_view(request):
+    formato = request.GET.get("formato", "xlsx").strip().lower()
+    fecha_str = timezone.now().strftime("%Y-%m-%d_%H%M")
+
+    hoy = date.today()
+    ventas = (
+        Venta.objects.filter(estatus="completada", fecha__year=hoy.year, fecha__month=hoy.month)
+        .select_related("empcve", "clicve")
+        .order_by("-vencve")
+    )
+    encabezado = ["Folio", "Fecha", "Cliente", "Vendedor", "Método de pago", "Total"]
+    filas = [
+        [
+            f"V-{v.vencve:04d}", v.fecha.strftime("%d/%m/%Y"),
+            v.clicve.nombre if v.clicve else "Mostrador",
+            v.empcve.nombre, v.metodo_pago.capitalize(), f"${float(v.total):.2f}",
+        ]
+        for v in ventas
+    ]
+
+    nombre_archivo = f"ventas_{fecha_str}"
+    if formato == "pdf":
+        return _pdf_response(nombre_archivo, "Ferretería — Reporte de ventas del mes", encabezado, filas)
+    return _excel_response(nombre_archivo, "Ventas", encabezado, filas)
+
+
+# /reportes/stock-bajo/?formato=xlsx|pdf — productos agotados o bajo mínimo.
+@require_GET
+@requiere_rol("Administrador")
+def reporte_stock_bajo_view(request):
+    formato = request.GET.get("formato", "xlsx").strip().lower()
+    fecha_str = timezone.now().strftime("%Y-%m-%d_%H%M")
+
+    stocks = (
+        Stock.objects.filter(Q(stock_actual=0) | Q(stock_actual__lt=F("stock_minimo")))
+        .select_related("procve", "procve__catcve")
+        .order_by("stock_actual")
+    )
+    encabezado = ["Código", "Producto", "Categoría", "Stock actual", "Stock mínimo", "Estado", "Recomendación"]
+    filas = []
+    for s in stocks:
+        p = s.procve
+        critico = s.stock_actual == 0
+        a_reabastecer = max(s.stock_minimo - s.stock_actual, s.stock_minimo if critico else 1)
+        filas.append([
+            p.modelo or f"PROD-{p.procve:04d}", p.nombre,
+            p.catcve.nombre if p.catcve else "—",
+            s.stock_actual, s.stock_minimo,
+            "Agotado" if critico else "Stock bajo",
+            f"Reabastecer {a_reabastecer} unidades",
+        ])
+
+    nombre_archivo = f"stock_bajo_{fecha_str}"
+    if formato == "pdf":
+        return _pdf_response(nombre_archivo, "Ferretería — Reporte de stock bajo", encabezado, filas)
+    return _excel_response(nombre_archivo, "Stock bajo", encabezado, filas)
+
+
+# /reportes/movimientos/?formato=xlsx|pdf — historial de entradas/salidas/ajustes.
+@require_GET
+@requiere_rol("Administrador")
+def reporte_movimientos_view(request):
+    formato = request.GET.get("formato", "xlsx").strip().lower()
+    fecha_str = timezone.now().strftime("%Y-%m-%d_%H%M")
+
+    movimientos = _obtener_movimientos()[:1000]  # tope razonable para no generar archivos gigantes
+    encabezado = ["Fecha y hora", "Tipo", "Producto", "Referencia", "Cantidad", "Stock anterior", "Stock actual", "Usuario"]
+    filas = [
+        [
+            m["created_at"].strftime("%d/%m/%Y %H:%M") if m["created_at"] else "—",
+            m["tipo"], m["producto_nombre"], m["referencia"], m["cantidad"],
+            m["stock_anterior"] if m["stock_anterior"] is not None else "—",
+            m["stock_actual"] if m["stock_actual"] is not None else "—",
+            m["usuario_nombre"] or "—",
+        ]
+        for m in movimientos
+    ]
+
+    nombre_archivo = f"movimientos_{fecha_str}"
+    if formato == "pdf":
+        return _pdf_response(nombre_archivo, "Ferretería — Reporte de movimientos", encabezado, filas)
+    return _excel_response(nombre_archivo, "Movimientos", encabezado, filas)
+
+
 @require_GET
 @requiere_rol("Administrador")
 def reportes_view(request):

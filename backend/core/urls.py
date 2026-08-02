@@ -43,6 +43,10 @@ urlpatterns = [
 
     #  Reportes (solo Administrador) ────────────────────────
     path('api/reportes/', views.reportes_view),
+    path('api/reportes/inventario/', views.reporte_inventario_view),
+    path('api/reportes/ventas/', views.reporte_ventas_view),
+    path('api/reportes/stock-bajo/', views.reporte_stock_bajo_view),
+    path('api/reportes/movimientos/', views.reporte_movimientos_view),
 
     # ── Dashboard ─────────────────────────────────────────────
     path('api/dashboard/stats/', views.dashboard_stats_view),

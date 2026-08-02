@@ -78,7 +78,10 @@
           <div class="rc-feat blue"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>Productos disponibles</div>
           <div class="rc-feat blue"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>Productos con stock bajo</div>
         </div>
-        <button class="btn-gen bg-blue" onclick="genReport('Inventario actual','Inventario','PDF')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>Generar reporte</button>
+        <div style="display:flex;gap:.6rem;">
+          <button class="btn-gen bg-blue" style="flex:1;" onclick="downloadReport('/reportes/inventario/?formato=xlsx','Inventario actual','Inventario','Excel')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>Excel</button>
+          <button class="btn-gen bg-blue" style="flex:1;" onclick="downloadReport('/reportes/inventario/?formato=pdf','Inventario actual','Inventario','PDF')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>PDF</button>
+        </div>
       </div>
       <div class="report-card">
         <div class="rc-head"><div class="rc-icon ri-green"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg></div>
@@ -89,7 +92,10 @@
           <div class="rc-feat green"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>Productos más vendidos</div>
           <div class="rc-feat green"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>Total de ingresos</div>
         </div>
-        <button class="btn-gen bg-green" onclick="genReport('Ventas del mes','Ventas','Excel')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>Generar reporte</button>
+        <div style="display:flex;gap:.6rem;">
+          <button class="btn-gen bg-green" style="flex:1;" onclick="downloadReport('/reportes/ventas/?formato=xlsx','Ventas del mes','Ventas','Excel')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>Excel</button>
+          <button class="btn-gen bg-green" style="flex:1;" onclick="downloadReport('/reportes/ventas/?formato=pdf','Ventas del mes','Ventas','PDF')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>PDF</button>
+        </div>
       </div>
       <div class="report-card">
         <div class="rc-head"><div class="rc-icon ri-amber"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></div>
@@ -100,7 +106,10 @@
           <div class="rc-feat amber"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>Stock mínimo configurado</div>
           <div class="rc-feat amber"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>Recomendaciones</div>
         </div>
-        <button class="btn-gen bg-amber" onclick="genReport('Stock bajo','Stock bajo','PDF')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>Generar reporte</button>
+        <div style="display:flex;gap:.6rem;">
+          <button class="btn-gen bg-amber" style="flex:1;" onclick="downloadReport('/reportes/stock-bajo/?formato=xlsx','Stock bajo','Stock bajo','Excel')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>Excel</button>
+          <button class="btn-gen bg-amber" style="flex:1;" onclick="downloadReport('/reportes/stock-bajo/?formato=pdf','Stock bajo','Stock bajo','PDF')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>PDF</button>
+        </div>
       </div>
       <div class="report-card">
         <div class="rc-head"><div class="rc-icon ri-purple"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg></div>
@@ -111,7 +120,10 @@
           <div class="rc-feat purple"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>Salidas de inventario</div>
           <div class="rc-feat purple"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>Ajustes y devoluciones</div>
         </div>
-        <button class="btn-gen bg-purple" onclick="genReport('Movimientos de inventario','Movimientos','Excel')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>Generar reporte</button>
+        <div style="display:flex;gap:.6rem;">
+          <button class="btn-gen bg-purple" style="flex:1;" onclick="downloadReport('/reportes/movimientos/?formato=xlsx','Movimientos de inventario','Movimientos','Excel')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>Excel</button>
+          <button class="btn-gen bg-purple" style="flex:1;" onclick="downloadReport('/reportes/movimientos/?formato=pdf','Movimientos de inventario','Movimientos','PDF')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>PDF</button>
+        </div>
       </div>
     </div>
 
@@ -168,6 +180,44 @@ function renderRecent(){
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
       </button></td>
     </tr>`).join('');
+}
+
+// Descarga real de un archivo (Excel/PDF) generado por el backend.
+// No se puede usar apiFetch aquí porque esa función siempre hace
+// res.json() — este endpoint regresa bytes binarios, no JSON.
+async function downloadReport(endpoint, nombre, tipo, fmt) {
+  showToast(`Generando "${nombre}" (${fmt})...`, 'success');
+  const token = localStorage.getItem('token');
+  try {
+    const res = await fetch(API + endpoint, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    if (!res.ok) {
+      let msg = 'No se pudo generar el reporte';
+      try { const err = await res.json(); msg = err.message || msg; } catch (e) {}
+      showToast(msg, 'error');
+      return;
+    }
+    const blob = await res.blob();
+    const disposition = res.headers.get('Content-Disposition') || '';
+    const match = disposition.match(/filename="?([^"]+)"?/);
+    const filename = match ? match[1] : `${nombre}.${fmt === 'PDF' ? 'pdf' : 'xlsx'}`;
+
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = filename;
+    document.body.appendChild(a); a.click(); a.remove();
+    window.URL.revokeObjectURL(url);
+
+    const now = new Date();
+    const fecha = now.toLocaleDateString('es-MX', {day:'2-digit',month:'2-digit',year:'numeric'}) + ' ' + now.toLocaleTimeString('es-MX', {hour:'2-digit',minute:'2-digit'});
+    recentReports.unshift({ nombre, tipo, fecha, by: user.nombre || 'Admin', fmt });
+    if (recentReports.length > 10) recentReports.pop();
+    renderRecent();
+    showToast('Reporte descargado', 'success');
+  } catch (e) {
+    showToast('Error de conexión con el servidor', 'error');
+  }
 }
 
 async function genReport(nombre,tipo,fmt){
