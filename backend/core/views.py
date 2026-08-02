@@ -79,58 +79,6 @@ from .jwt_utils import generar_jwt, requiere_rol
 @csrf_exempt
 @require_POST
 @requiere_rol("Administrador")
-def crear_producto_view(request):
-    """
-    Solo Administrador. Espera:
-    { "catcve": 1, "nombre": "...", "precio": 100.00, "descripcion": "...", 
-      "modelo": "...", "marca": "...", "color": "...", "informacion_adicional": "..." }
-    """
-    data = json.loads(request.body)
-
-    catcve = data.get("catcve")
-    nombre = data.get("nombre")
-    precio = data.get("precio")
-
-    if not catcve or not nombre or precio is None:
-        return JsonResponse({"error": "Faltan campos obligatorios: catcve, nombre, precio"}, status=400)
-
-    try:
-        categoria = Categoria.objects.get(catcve=catcve)
-    except Categoria.DoesNotExist:
-        return JsonResponse({"error": "La categoría indicada no existe"}, status=400)
-
-    try:
-        precio = float(precio)
-    except (TypeError, ValueError):
-        return JsonResponse({"error": "El precio debe ser un número válido"}, status=400)
-
-    if float(precio) <= 0:
-        return JsonResponse({"error": "El precio debe ser mayor a 0"}, status=400)
-
-    producto = Producto.objects.create(
-        catcve=categoria,
-        nombre=nombre,
-        precio=precio,
-        descripcion=data.get("descripcion"),
-        modelo=data.get("modelo"),
-        marca=data.get("marca"),
-        color=data.get("color"),
-        informacion_adicional=data.get("informacion_adicional"),
-    )
-
-    return JsonResponse({
-        "mensaje": "Producto creado correctamente",
-        "producto": {
-            "procve": producto.procve,
-            "nombre": producto.nombre,
-            "precio": str(producto.precio),
-            "catcve": categoria.catcve,
-        }
-    }, status=201)
-
-@csrf_exempt
-@require_POST
-@requiere_rol("Administrador")
 def crear_empleado_view(request):
     """
     Solo Administrador. Espera:
@@ -936,6 +884,7 @@ def dashboard_stats_view(request):
 
     stock_bajo = Stock.objects.filter(stock_actual__gt=0, stock_actual__lt=F("stock_minimo")).count()
     agotados = Stock.objects.filter(stock_actual=0).count()
+    productos_disponibles = Stock.objects.filter(stock_actual__gt=0).count()
     # Mismo número que va a ver el usuario en la campanita en TODAS las
     # pantallas y en la tabla de alertas.html: alertas abiertas (Pendiente
     # o Notificada) en la tabla real, no un recálculo aparte.
@@ -947,6 +896,7 @@ def dashboard_stats_view(request):
         "ok": True,
         "data": {
             "totalProductos": total_productos,
+            "productosDisponibles": productos_disponibles,
             "ventasMes": float(ventas_mes_total),
             "totalVentasMes": ventas_mes_count,
             "alertasPendientes": alertas_abiertas,
@@ -1484,21 +1434,25 @@ def productos_ui_view(request):
     if Producto.objects.filter(modelo__iexact=codigo).exists():
         return JsonResponse({"ok": False, "message": f"Ya existe un producto con el código '{codigo}'"}, status=400)
 
-    producto = Producto.objects.create(
-        catcve=categoria,
-        nombre=nombre,
-        modelo=codigo,
-        precio=precio,
-        descripcion=descripcion,
-        estatus=estado.lower(),
-    )
+    # Atómico: si por lo que sea falla la creación del Stock, el Producto
+    # tampoco se queda a medias creado (eso es justo lo que dejaba
+    # productos "fantasma" sin stock, invisibles para Alertas/Dashboard).
+    with transaction.atomic():
+        producto = Producto.objects.create(
+            catcve=categoria,
+            nombre=nombre,
+            modelo=codigo,
+            precio=precio,
+            descripcion=descripcion,
+            estatus=estado.lower(),
+        )
 
-    Stock.objects.create(
-        procve=producto,
-        stock_actual=stock_inicial,
-        stock_minimo=stock_minimo,
-        estatus="alerta" if _evaluar_alerta_tipo(stock_inicial, stock_minimo) else "normal",
-    )
+        Stock.objects.create(
+            procve=producto,
+            stock_actual=stock_inicial,
+            stock_minimo=stock_minimo,
+            estatus="alerta" if _evaluar_alerta_tipo(stock_inicial, stock_minimo) else "normal",
+        )
 
     return JsonResponse({"ok": True, "data": {"id": producto.procve}})
 #

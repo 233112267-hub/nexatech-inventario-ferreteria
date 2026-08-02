@@ -1000,3 +1000,161 @@ BEGIN
     END IF;
 END;
 $$;
+
+
+-- checar
+- ============================================================
+-- Migración: alertas reales + limpieza de productos duplicados
+-- ============================================================
+-- Corre esto en el SQL Editor de Neon. Si todavía no corriste
+-- migracion_stock_unico.sql, córrela primero (limpia duplicados de
+-- Stock por producto). Esta migración limpia duplicados de PRODUCTO
+-- (renglones distintos con el mismo código, ej. varios "Tornillos"
+-- PROD-678), y corrige el bug de las funciones sp_disminuir_stock /
+-- sp_abastecer_stock: antes, un producto agotado (stock_actual = 0)
+-- con stock_minimo también en 0 NO se marcaba como alerta, porque
+-- "0 < 0" es falso. Ahora agotado siempre es alerta, sin importar el
+-- mínimo.
+-- ============================================================
+ 
+-- 1) Diagnóstico: productos con el mismo código (mismo modelo)
+SELECT modelo, COUNT(*) AS renglones, array_agg(procve ORDER BY procve) AS procve_ids
+FROM producto
+WHERE modelo IS NOT NULL
+GROUP BY modelo
+HAVING COUNT(*) > 1;
+ 
+-- 2) Limpieza. Antes de borrar los productos duplicados hay que resolver
+--    TODO lo que los referencia (si no, Postgres truena por llave foránea,
+--    como ya te pasó con disponibilidad_producto). Las tablas que apuntan
+--    a producto.procve son: stock, disponibilidad_producto, detalle_venta
+--    y alerta.
+--
+--    Para cada grupo de productos duplicados, nos quedamos con el procve
+--    más reciente ("sobreviviente") y:
+--      a) Las ventas ya hechas (detalle_venta) y las alertas (alerta) que
+--         apunten a un duplicado viejo se REASIGNAN al sobreviviente, para
+--         no perder historial real.
+--      b) disponibilidad_producto y stock de los duplicados viejos se
+--         BORRAN (son solo "fotos" de disponibilidad/stock, no historial,
+--         así que no hay nada que rescatar ahí).
+--      c) Al final se borran los productos duplicados viejos.
+ 
+CREATE TEMP TABLE _dup_map AS
+SELECT p.procve AS procve_viejo, dup.procve_sobreviviente
+FROM producto p
+JOIN (
+    SELECT modelo, MAX(procve) AS procve_sobreviviente
+    FROM producto
+    WHERE modelo IS NOT NULL
+    GROUP BY modelo
+    HAVING COUNT(*) > 1
+) dup ON dup.modelo = p.modelo
+WHERE p.procve <> dup.procve_sobreviviente;
+ 
+-- a) Reasignar historial real al sobreviviente
+UPDATE detalle_venta dv
+SET procve = m.procve_sobreviviente
+FROM _dup_map m
+WHERE dv.procve = m.procve_viejo;
+ 
+UPDATE alerta a
+SET procve = m.procve_sobreviviente
+FROM _dup_map m
+WHERE a.procve = m.procve_viejo;
+ 
+-- b) Borrar lo que es solo "foto" (no historial) de los duplicados viejos
+DELETE FROM disponibilidad_producto dp
+USING _dup_map m
+WHERE dp.procve = m.procve_viejo;
+ 
+DELETE FROM stock s
+USING _dup_map m
+WHERE s.procve = m.procve_viejo;
+ 
+-- c) Borrar los productos duplicados viejos
+DELETE FROM producto p
+USING _dup_map m
+WHERE p.procve = m.procve_viejo;
+ 
+DROP TABLE _dup_map;
+ 
+-- 3) Blindaje: nunca más dos productos con el mismo código
+ALTER TABLE producto
+  ADD CONSTRAINT producto_modelo_unique UNIQUE (modelo);
+ 
+-- 4) Corregir sp_disminuir_stock: agotado siempre es 'alerta'
+CREATE OR REPLACE PROCEDURE sp_disminuir_stock(p_procve INT, p_cantidad INT)
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    v_actual  INT;
+    v_minimo  INT;
+    v_nuevo   INT;
+BEGIN
+    SELECT stock_actual, stock_minimo INTO v_actual, v_minimo
+    FROM stock WHERE procve = p_procve;
+ 
+    IF NOT FOUND THEN
+        RAISE NOTICE 'No existe registro de stock para el producto %', p_procve;
+        RETURN;
+    END IF;
+ 
+    IF v_actual < p_cantidad THEN
+        RAISE EXCEPTION 'Stock insuficiente para el producto % (disponible: %, solicitado: %)', p_procve, v_actual, p_cantidad;
+    END IF;
+ 
+    v_nuevo := v_actual - p_cantidad;
+ 
+    IF v_nuevo = 0 OR v_nuevo < v_minimo THEN
+        UPDATE stock
+        SET stock_actual = v_nuevo,
+            estatus = 'alerta',
+            descripcion = 'Stock bajo el mínimo, reabastecer pronto',
+            fecha = CURRENT_DATE
+        WHERE procve = p_procve;
+    ELSE
+        UPDATE stock
+        SET stock_actual = v_nuevo,
+            estatus = 'normal',
+            descripcion = NULL,
+            fecha = CURRENT_DATE
+        WHERE procve = p_procve;
+    END IF;
+END;
+$$;
+ 
+-- 5) Corregir sp_abastecer_stock: mismo criterio
+CREATE OR REPLACE PROCEDURE sp_abastecer_stock(p_procve INT, p_cantidad INT)
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    v_actual INT;
+    v_minimo INT;
+    v_nuevo  INT;
+BEGIN
+    SELECT stock_actual, stock_minimo INTO v_actual, v_minimo
+    FROM stock WHERE procve = p_procve;
+ 
+    IF NOT FOUND THEN
+        RAISE NOTICE 'No existe registro de stock para el producto %', p_procve;
+        RETURN;
+    END IF;
+ 
+    v_nuevo := v_actual + p_cantidad;
+ 
+    IF v_nuevo = 0 OR v_nuevo < v_minimo THEN
+        UPDATE stock
+        SET stock_actual = v_nuevo,
+            estatus = 'alerta',
+            descripcion = 'Stock bajo el mínimo, reabastecer pronto',
+            fecha = CURRENT_DATE
+        WHERE procve = p_procve;
+    ELSE
+        UPDATE stock
+        SET stock_actual = v_nuevo, estatus = 'normal', descripcion = NULL, fecha = CURRENT_DATE
+        WHERE procve = p_procve;
+    END IF;
+END;
+$$;
+ 

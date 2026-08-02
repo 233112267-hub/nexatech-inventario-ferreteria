@@ -153,7 +153,8 @@ class Alerta(models.Model):
     estado = models.CharField(max_length=20, default='Pendiente')  # 'Pendiente' | 'Notificada' | 'Resuelta'
     descripcion = models.CharField(max_length=200, blank=True, null=True)
     fecha_creacion = models.DateTimeField(auto_now_add=True)
-    fecha_actualizacion = models.DateTimeField(auto_now=True)
+    fecha_notificacion = models.DateTimeField(blank=True, null=True)
+    fecha_resolucion = models.DateTimeField(blank=True, null=True)
 
     class Meta:
         managed = False
