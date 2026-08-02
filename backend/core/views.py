@@ -1577,8 +1577,6 @@ def producto_ui_detail_view(request, procve):
 # y reutilizarlos aquí habría dejado un hueco (un Vendedor podría pedir
 # "reportes" llamando esas rutas compartidas directamente). Este endpoint
 # corre la misma consulta pero detrás de su propio candado de rol.
-@require_GET
-@requiere_rol("Administrador")
 def _excel_response(nombre_archivo, titulo_hoja, encabezados, filas):
     """Arma un .xlsx a partir de una lista de encabezados y filas (listas
     de valores, mismo orden que encabezados) y lo regresa como descarga."""

@@ -129,7 +129,7 @@
 
     <div class="section-header">
       <h3>Reportes recientes</h3>
-      <span style="font-size:.8rem;color:var(--muted);font-weight:600;">Esta sesión</span>
+      <span style="font-size:.8rem;color:var(--muted);font-weight:600;">Últimos 10</span>
     </div>
     <div class="table-wrap">
       <table>
@@ -162,11 +162,18 @@ checkAuth(); setupLogout(); renderUserInfo();
 const TYPE_ICONS={Inventario:'📋',Ventas:'🛒','Stock bajo':'⚠️',Movimientos:'🔄'};
 const TYPE_CLASS={Inventario:'tr-inv',Ventas:'tr-ven','Stock bajo':'tr-stk',Movimientos:'tr-mov'};
 const user=JSON.parse(localStorage.getItem('user')||'{}');
-let recentReports=[];
+// Antes esta lista vivía solo en memoria (let recentReports=[]) y se
+// perdía cada vez que recargabas la página. Ahora se guarda en
+// localStorage, así que sobrevive a un F5 o a cerrar y volver a abrir
+// el navegador (solo se borra si limpias los datos del sitio).
+let recentReports = JSON.parse(localStorage.getItem('recentReports') || '[]');
+function saveRecentReports(){
+  localStorage.setItem('recentReports', JSON.stringify(recentReports));
+}
 
 function renderRecent(){
   if(!recentReports.length){
-    document.getElementById('recentTable').innerHTML='<tr><td colspan="6" style="text-align:center;padding:2rem;color:var(--muted);">Aún no se han generado reportes en esta sesión</td></tr>';
+    document.getElementById('recentTable').innerHTML='<tr><td colspan="6" style="text-align:center;padding:2rem;color:var(--muted);">Aún no se han generado reportes</td></tr>';
     return;
   }
   document.getElementById('recentTable').innerHTML=recentReports.map(r=>`
@@ -213,6 +220,7 @@ async function downloadReport(endpoint, nombre, tipo, fmt) {
     const fecha = now.toLocaleDateString('es-MX', {day:'2-digit',month:'2-digit',year:'numeric'}) + ' ' + now.toLocaleTimeString('es-MX', {hour:'2-digit',minute:'2-digit'});
     recentReports.unshift({ nombre, tipo, fecha, by: user.nombre || 'Admin', fmt });
     if (recentReports.length > 10) recentReports.pop();
+    saveRecentReports();
     renderRecent();
     showToast('Reporte descargado', 'success');
   } catch (e) {
