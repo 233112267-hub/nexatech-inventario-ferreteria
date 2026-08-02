@@ -18,7 +18,7 @@ from .jwt_utils import generar_jwt
 #vista de modelo
 from django.db.models import Sum, Count, Q, F
 from datetime import date, timedelta
-from .models import Stock, Alerta
+from .models import Stock, Alerta, Movimiento
 
 @csrf_exempt
 @require_POST
@@ -651,6 +651,16 @@ def crear_venta_view(request):
         mensaje = str(e).split("\n")[0]  # primera línea, evita el traceback completo de SQL
         return JsonResponse({"ok": False, "message": f"No se pudo completar la venta: {mensaje}"}, status=400)
 
+    # El trigger trg_stock_movimiento ya registró el stock_anterior/actual
+    # real de cada producto vendido; aquí solo completamos qué venta y
+    # qué empleado lo causó (el trigger no lo sabe, solo ve el UPDATE).
+    for producto, _cantidad in productos_validados:
+        mov = Movimiento.objects.filter(procve=producto).order_by("-movcve").first()
+        if mov and mov.referencia is None:
+            mov.referencia = f"Venta V-{venta.vencve:04d}"
+            mov.empcve = empleado
+            mov.save()
+
     venta.refresh_from_db()
 
     detalles = DetalleVenta.objects.filter(vencve=venta)
@@ -1085,6 +1095,14 @@ def alerta_resolver_view(request, alertcve):
 
     with connection.cursor() as cursor:
         cursor.execute("CALL sp_abastecer_stock(%s, %s)", [alerta.procve_id, cantidad])
+
+    # Igual que en ventas: el trigger ya guardó el antes/después real,
+    # solo completamos de dónde vino este movimiento.
+    mov = Movimiento.objects.filter(procve_id=alerta.procve_id).order_by("-movcve").first()
+    if mov and mov.referencia is None:
+        mov.referencia = f"Reabastecimiento (Alerta #{alerta.alertcve} resuelta)"
+        mov.empcve_id = request.usuario_jwt.get("empcve")
+        mov.save()
 
     alerta.estado = "Resuelta"
     alerta.fecha_resolucion = timezone.now()
@@ -1529,6 +1547,14 @@ def producto_ui_detail_view(request, procve):
         stock.estatus = "alerta" if _evaluar_alerta_tipo(stock.stock_actual, stock.stock_minimo) else "normal"
         stock.save()
 
+        # Si el guardado sí cambió stock_actual, el trigger ya generó su
+        # movimiento; solo le ponemos de dónde vino.
+        mov = Movimiento.objects.filter(procve=producto).order_by("-movcve").first()
+        if mov and mov.referencia is None:
+            mov.referencia = "Ajuste manual desde Productos"
+            mov.empcve_id = request.usuario_jwt.get("empcve")
+            mov.save()
+
     return JsonResponse({"ok": True})
 
 # ── Reportes (reportes.html) ──────────────────────────────────
@@ -1634,76 +1660,42 @@ def reportes_view(request):
 # trigger, tal como se discutió.
 def _obtener_movimientos(search="", tipo_filtro=""):
     """
-    No existe una tabla de movimientos real (decisión: no tocar el modelo
-    ER/BD ya definido). Se reconstruye con lo que ya existe:
-      - "Salida": cada línea de detalle_venta. Es historial real y
-        confiable (fecha real, no se sobrescribe, sabemos qué empleado
-        hizo la venta).
-      - "Ajuste": el nivel de stock actual por producto. stock.fecha se
-        sobrescribe en cada sp_disminuir_stock/sp_abastecer_stock, así
-        que esto NO es un historial real de entradas — es solo la
-        última foto conocida de cada producto. Se etiqueta como tal.
-    No hay ninguna fuente para "Entrada" real todavía (no se guarda quién
-    ni cuándo reabasteció cada vez, solo el nivel resultante). Si el
-    filtro pide "Entrada" simplemente no habrá resultados por ahora.
+    Historial real de stock, respaldado por la tabla `movimiento` (ver
+    database/migracion_tabla_movimiento.sql). Cada cambio de
+    stock.stock_actual —venta, reabastecimiento o edición manual—
+    dispara un trigger en Postgres que guarda ahí mismo el stock_anterior
+    y stock_actual reales, así que ya no hay que reconstruir nada al
+    vuelo ni adivinar "última foto conocida".
     """
-    movimientos = []
-
-    detalles = (
-        DetalleVenta.objects.filter(estatus="activo")
-        .select_related("procve", "procve__catcve", "vencve", "vencve__empcve")
-    )
-    for d in detalles:
-        p = d.procve
-        emp = d.vencve.empcve if d.vencve else None
-        movimientos.append({
-            "tipo": "Salida",
-            "cantidad": -d.cantidad,
-            "created_at": d.fecha,
-            "producto_nombre": p.nombre,
-            "producto_codigo": p.modelo or f"PROD-{p.procve:04d}",
-            "categoria": p.catcve.nombre if p.catcve else None,
-            "referencia": f"Venta V-{d.vencve_id:04d}",
-            "stock_anterior": None,
-            "stock_actual": None,
-            "usuario_nombre": f"{emp.nombre} {emp.apellidopaterno}".strip() if emp else None,
-        })
-
-    # .filter(procve=X) puede regresar más de un renglón de Stock por
-    # producto si la BD tiene duplicados (no hay UNIQUE en stock.procve,
-    # ver database/migracion_stock_unico.sql). Nos quedamos con la foto
-    # más reciente por producto para no repetir "Ajuste" varias veces.
-    stocks_por_producto = {}
-    for s in Stock.objects.select_related("procve", "procve__catcve").order_by("stoccve"):
-        stocks_por_producto[s.procve_id] = s  # el último de la iteración (más reciente) gana
-
-    for s in stocks_por_producto.values():
-        p = s.procve
-        movimientos.append({
-            "tipo": "Ajuste",
-            "cantidad": 0,
-            "created_at": s.fecha,
-            "producto_nombre": p.nombre,
-            "producto_codigo": p.modelo or f"PROD-{p.procve:04d}",
-            "categoria": p.catcve.nombre if p.catcve else None,
-            "referencia": "Última foto de stock (sin historial de entradas)",
-            "stock_anterior": None,
-            "stock_actual": s.stock_actual,
-            "usuario_nombre": None,
-        })
+    qs = Movimiento.objects.select_related("procve", "procve__catcve", "empcve")
 
     if tipo_filtro:
-        movimientos = [m for m in movimientos if m["tipo"] == tipo_filtro]
+        qs = qs.filter(tipo=tipo_filtro)
     if search:
-        s_lower = search.lower()
-        movimientos = [
-            m for m in movimientos
-            if s_lower in (m["producto_nombre"] or "").lower()
-            or s_lower in (m["producto_codigo"] or "").lower()
-            or s_lower in (m["referencia"] or "").lower()
-        ]
+        qs = qs.filter(
+            Q(procve__nombre__icontains=search)
+            | Q(procve__modelo__icontains=search)
+            | Q(referencia__icontains=search)
+        )
 
-    movimientos.sort(key=lambda m: m["created_at"], reverse=True)
+    qs = qs.order_by("-fecha", "-movcve")
+
+    movimientos = []
+    for m in qs:
+        p = m.procve
+        movimientos.append({
+            "tipo": m.tipo,
+            "cantidad": m.cantidad,
+            "created_at": m.fecha,
+            "producto_nombre": p.nombre,
+            "producto_codigo": p.modelo or f"PROD-{p.procve:04d}",
+            "categoria": p.catcve.nombre if p.catcve else None,
+            "referencia": m.referencia or "—",
+            "stock_anterior": m.stock_anterior,
+            "stock_actual": m.stock_actual,
+            "usuario_nombre": f"{m.empcve.nombre} {m.empcve.apellidopaterno}".strip() if m.empcve else None,
+        })
+
     return movimientos
 
 

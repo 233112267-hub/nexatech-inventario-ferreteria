@@ -135,6 +135,28 @@ class Stock(models.Model):
         db_table = 'stock'
 
 
+# ── Movimiento (historial real de entradas/salidas/ajustes) ───
+# Antes "Movimientos" se reconstruía al vuelo desde detalle_venta (para
+# salidas) y la última foto de Stock (para "ajustes"), y por eso nunca
+# se podía ver stock_anterior/stock_actual de verdad. Esta tabla SÍ
+# guarda cada cambio de stock con su antes/después, gracias al trigger
+# trg_stock_movimiento en Postgres (ver database/migracion_tabla_movimiento.sql).
+class Movimiento(models.Model):
+    movcve = models.AutoField(primary_key=True)
+    procve = models.ForeignKey(Producto, on_delete=models.DO_NOTHING, db_column='procve')
+    tipo = models.CharField(max_length=20)  # 'Entrada' | 'Salida' | 'Ajuste'
+    cantidad = models.IntegerField()
+    stock_anterior = models.IntegerField()
+    stock_actual = models.IntegerField()
+    referencia = models.CharField(max_length=150, blank=True, null=True)
+    empcve = models.ForeignKey(Empleado, on_delete=models.DO_NOTHING, db_column='empcve', blank=True, null=True)
+    fecha = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        managed = False
+        db_table = 'movimiento'
+
+
 
 # ── Alerta (persistida, con estado propio) ────────────────────
 # Antes las alertas se calculaban al vuelo desde Stock y no se guardaban
