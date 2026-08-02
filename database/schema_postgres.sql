@@ -1157,4 +1157,133 @@ BEGIN
     END IF;
 END;
 $$;
+-- ============================================================
+-- Diagnóstico y reparación: tabla `alerta` y sus permisos
+-- ============================================================
+-- El Dashboard y la pantalla de Alertas dependen de la tabla `alerta`.
+-- Si esta migración nunca se corrió en tu Neon real (o se corrió antes
+-- de que existiera `alerta` un GRANT ON ALL TABLES que no la alcanzó),
+-- cualquier consulta que la toque revienta con 500 y el frontend lo
+-- muestra como "Error de conexión con el servidor".
+--
+-- Este script es seguro de correr aunque la tabla ya exista (usa
+-- IF NOT EXISTS) y aunque los permisos ya estén bien (un GRANT de más
+-- no rompe nada).
+-- ============================================================
+ 
+-- 0) Diagnóstico rápido: ¿existe la tabla? ¿qué permisos tiene app_django?
+SELECT EXISTS (
+    SELECT 1 FROM information_schema.tables
+    WHERE table_schema = 'public' AND table_name = 'alerta'
+) AS tabla_existe;
+ 
+SELECT grantee, privilege_type
+FROM information_schema.role_table_grants
+WHERE table_name = 'alerta';
+ 
+-- 1) Crear la tabla si no existe
+CREATE TABLE IF NOT EXISTS alerta (
+    alertcve            SERIAL PRIMARY KEY,
+    procve              INT NOT NULL REFERENCES producto(procve),
+    tipo                VARCHAR(20) NOT NULL CHECK (tipo IN ('Crítica','Advertencia')),
+    estado              VARCHAR(20) NOT NULL DEFAULT 'Pendiente' CHECK (estado IN ('Pendiente','Notificada','Resuelta')),
+    descripcion         VARCHAR(200),
+    fecha_creacion      TIMESTAMP NOT NULL DEFAULT now(),
+    fecha_notificacion  TIMESTAMP,
+    fecha_resolucion    TIMESTAMP
+);
+ 
+CREATE INDEX IF NOT EXISTS idx_alerta_procve ON alerta(procve);
+CREATE INDEX IF NOT EXISTS idx_alerta_estado ON alerta(estado);
+ 
+-- 2) Asegurar que el usuario de la app tenga permisos sobre ESTA tabla
+--    en particular (por si el GRANT general se corrió antes de que
+--    `alerta` existiera). Ajusta 'app_django' si tu usuario real de
+--    conexión (DB_USER en tu .env) se llama distinto.
+GRANT SELECT, INSERT, UPDATE ON alerta TO app_django;
+GRANT USAGE, SELECT ON SEQUENCE alerta_alertcve_seq TO app_django;
+ 
+-- 3) Por si acaso, re-aplicar el GRANT general también (no hace daño
+--    repetirlo, y cubre cualquier otra tabla que se te haya podido
+--    quedar fuera por la misma razón).
+GRANT SELECT, INSERT, UPDATE ON ALL TABLES IN SCHEMA public TO app_django;
+GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO app_django;
+
+-- ============================================================
+-- Asegurar columnas fecha_notificacion / fecha_resolucion en alerta
+-- ============================================================
+-- El modelo Django de Alerta tenía un campo "fecha_actualizacion" que
+-- nunca existió como tal en el diseño original (schema_postgres.sql
+-- siempre definió fecha_notificacion y fecha_resolucion por separado).
+-- Esto tronaba con FieldDoesNotExist en cuanto el backend intentaba
+-- tocar esos campos (notificar, resolver, o la sincronización
+-- automática del dashboard).
+--
+-- Este ALTER es seguro de correr aunque las columnas ya existan
+-- (usa IF NOT EXISTS) y no borra nada.
+-- ============================================================
+ 
+ALTER TABLE alerta ADD COLUMN IF NOT EXISTS fecha_notificacion TIMESTAMP;
+ALTER TABLE alerta ADD COLUMN IF NOT EXISTS fecha_resolucion TIMESTAMP;
+ 
+-- Diagnóstico: confirma que ya quedaron las columnas correctas
+SELECT column_name, data_type
+FROM information_schema.columns
+WHERE table_name = 'alerta'
+ORDER BY ordinal_position;
+
+
+CREATE TABLE IF NOT EXISTS movimiento (
+    movcve         SERIAL PRIMARY KEY,
+    procve         INT NOT NULL REFERENCES producto(procve),
+    tipo           VARCHAR(20) NOT NULL CHECK (tipo IN ('Entrada','Salida','Ajuste')),
+    cantidad       INT NOT NULL,
+    stock_anterior INT NOT NULL,
+    stock_actual   INT NOT NULL,
+    referencia     VARCHAR(150),
+    empcve         INT REFERENCES empleado(empcve),
+    fecha          TIMESTAMP NOT NULL DEFAULT now()
+);
+ 
+CREATE INDEX IF NOT EXISTS idx_movimiento_procve ON movimiento(procve);
+CREATE INDEX IF NOT EXISTS idx_movimiento_fecha ON movimiento(fecha);
+ 
+-- Función del trigger: decide el tipo según si el stock subió o bajó,
+-- y guarda el antes/después real. La referencia y el empleado se
+-- completan después desde Django (crear_venta_view / alerta_resolver_view
+-- / producto_ui_detail_view), porque el trigger por sí solo no sabe si
+-- el cambio vino de una venta, un reabastecimiento o una edición manual.
+CREATE OR REPLACE FUNCTION trg_fn_registrar_movimiento()
+RETURNS TRIGGER AS $$
+DECLARE
+    v_tipo VARCHAR(20);
+BEGIN
+    IF NEW.stock_actual < OLD.stock_actual THEN
+        v_tipo := 'Salida';
+    ELSIF NEW.stock_actual > OLD.stock_actual THEN
+        v_tipo := 'Entrada';
+    ELSE
+        v_tipo := 'Ajuste';
+    END IF;
+ 
+    INSERT INTO movimiento (procve, tipo, cantidad, stock_anterior, stock_actual)
+    VALUES (NEW.procve, v_tipo, NEW.stock_actual - OLD.stock_actual, OLD.stock_actual, NEW.stock_actual);
+ 
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+ 
+DROP TRIGGER IF EXISTS trg_stock_movimiento ON stock;
+CREATE TRIGGER trg_stock_movimiento
+AFTER UPDATE OF stock_actual ON stock
+FOR EACH ROW
+WHEN (OLD.stock_actual IS DISTINCT FROM NEW.stock_actual)
+EXECUTE FUNCTION trg_fn_registrar_movimiento();
+ 
+-- Permisos para el usuario de la app (ajusta 'app_django' si tu
+-- DB_USER real se llama distinto)
+GRANT SELECT, INSERT, UPDATE ON movimiento TO app_django;
+GRANT USAGE, SELECT ON SEQUENCE movimiento_movcve_seq TO app_django;
+ 
+
  
