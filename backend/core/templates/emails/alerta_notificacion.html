@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="es">
+<body style="margin:0; padding:0; background:#f4f6f8; font-family: Arial, sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="max-width:600px; margin:0 auto; background:#ffffff;">
+    <tr>
+      <td style="background:#0d1b4c; padding:24px 32px;">
+        <span style="color:#ffffff; font-size:22px; font-weight:bold;">🔨 FERRETERÍA</span><br>
+        <span style="color:#4ade80; font-size:13px;">Soluciones que construyen</span>
+      </td>
+    </tr>
+    <tr><td style="height:4px; background:#4ade80;"></td></tr>
+    <tr>
+      <td style="padding:40px 32px; text-align:center;">
+        <div style="width:64px; height:64px; margin:0 auto 20px; background:#f0fdf4; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:30px; line-height:64px;">
+          🔔
+        </div>
+        <h2 style="color:#0d1b4c; margin-bottom:4px;">Notificación del sistema</h2>
+        <p style="color:#64748b; margin-top:0;">Se ha generado una alerta {{ tipo|lower }} en el inventario.</p>
+
+        <table width="100%" cellpadding="0" cellspacing="0" style="margin:28px 0; background:#f8fafc; border-radius:10px; text-align:left;">
+          <tr>
+            <td style="padding:14px 20px; border-bottom:1px solid #e2e8f0; color:#64748b; font-size:13px; width:40%;">Tipo de alerta</td>
+            <td style="padding:14px 20px; border-bottom:1px solid #e2e8f0; color:#0d1b4c; font-size:14px; font-weight:bold;">{{ tipo }}</td>
+          </tr>
+          <tr>
+            <td style="padding:14px 20px; border-bottom:1px solid #e2e8f0; color:#64748b; font-size:13px;">Producto</td>
+            <td style="padding:14px 20px; border-bottom:1px solid #e2e8f0; color:#0d1b4c; font-size:14px; font-weight:bold;">{{ producto }}</td>
+          </tr>
+          <tr>
+            <td style="padding:14px 20px; border-bottom:1px solid #e2e8f0; color:#64748b; font-size:13px;">Fecha</td>
+            <td style="padding:14px 20px; border-bottom:1px solid #e2e8f0; color:#0d1b4c; font-size:14px;">{{ fecha }}</td>
+          </tr>
+          <tr>
+            <td style="padding:14px 20px; color:#64748b; font-size:13px;">Hora</td>
+            <td style="padding:14px 20px; color:#0d1b4c; font-size:14px;">{{ hora }}</td>
+          </tr>
+        </table>
+
+        <p style="color:#64748b; font-size:14px;">{{ detalle }}</p>
+        {% if es_recordatorio %}
+        <p style="color:#b45309; font-size:13px; background:#fffbeb; padding:10px 16px; border-radius:8px; display:inline-block;">
+          Este es un recordatorio automático: la alerta sigue sin resolverse.
+        </p>
+        {% endif %}
+
+        <a href="{{ url_sistema }}" style="display:inline-block; margin-top:24px; background:#16a34a; color:#ffffff; text-decoration:none; font-weight:bold; padding:12px 28px; border-radius:8px; font-size:14px;">
+          Ver en el sistema
+        </a>
+      </td>
+    </tr>
+    <tr>
+      <td style="padding:20px 32px; border-top:1px solid #e2e8f0; text-align:center; color:#94a3b8; font-size:12px;">
+        soporte@ferreteria.com &nbsp;|&nbsp; © 2026 Ferretería. Todos los derechos reservados.
+      </td>
+    </tr>
+  </table>
+</body>
+</html>

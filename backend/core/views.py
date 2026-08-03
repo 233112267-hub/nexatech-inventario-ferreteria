@@ -24,6 +24,7 @@ from django.views.decorators.http import require_http_methods
 from django.views.decorators.csrf import csrf_exempt
 from django.db import transaction, DatabaseError, connection
 from django.utils import timezone
+from django.conf import settings
 from .models import Empleado, Cliente
 from .models import Empleado, Cliente, Producto, Categoria, Surcusal, Venta, DetalleVenta
 from .models import Empleado, Cliente, Producto, Categoria, Surcusal
@@ -674,6 +675,11 @@ def crear_venta_view(request):
             mov.empcve = empleado
             mov.save()
 
+    # Si la venta dejó algún producto agotado o bajo el mínimo, que la
+    # alerta (y su correo) salgan YA, sin esperar a que el navegador de
+    # alguien haga el siguiente polling de /dashboard/stats (cada 25s).
+    _sincronizar_alertas()
+
     venta.refresh_from_db()
 
     detalles = DetalleVenta.objects.filter(vencve=venta)
@@ -861,16 +867,21 @@ def _sincronizar_alertas():
     corriente:
       - Si un producto amerita alerta (agotado o bajo mínimo) y no tiene
         ya una alerta abierta (Pendiente/Notificada) de ese mismo tipo,
-        crea una nueva alerta Pendiente.
+        crea una nueva alerta y manda el correo AL INSTANTE (no hace
+        falta que un admin le dé clic a "Notificar" — eso queda como
+        respaldo manual por si el envío automático falla, ej. SMTP caído).
       - Si un producto tenía una alerta abierta de OTRO tipo (ej. pasó de
         Advertencia a Crítica al venderse más), cierra la vieja como
-        Resuelta y abre una nueva del tipo correcto.
+        Resuelta y abre una nueva del tipo correcto (con su propio correo).
       - Si un producto ya no amerita alerta (se reabasteció por fuera del
         flujo normal, por ejemplo editando el stock a mano) y le había
         quedado una alerta abierta, la cierra sola como Resuelta.
-    No duplica notificaciones: solo crea/cierra registros, nunca reenvía
-    el correo (eso solo pasa cuando alguien aprieta "Notificar").
+    No duplica notificaciones: cada alerta nueva manda su correo una sola
+    vez al crearse; los recordatorios de las 8h los maneja aparte
+    _reenviar_alertas_vencidas().
     """
+    destinatarios = None  # se busca solo la primera vez que hace falta
+
     for s in Stock.objects.select_related("procve"):
         tipo_actual = _evaluar_alerta_tipo(s.stock_actual, s.stock_minimo)
         abiertas = Alerta.objects.filter(procve=s.procve, estado__in=["Pendiente", "Notificada"])
@@ -884,12 +895,69 @@ def _sincronizar_alertas():
             continue  # ya hay una alerta abierta correcta para este producto
 
         abiertas.exclude(tipo=tipo_actual).update(estado="Resuelta", fecha_resolucion=timezone.now())
-        Alerta.objects.create(
+        alerta = Alerta.objects.create(
             procve=s.procve,
             tipo=tipo_actual,
             estado="Pendiente",
             descripcion=f"Quedan {s.stock_actual} unidades (mínimo {s.stock_minimo})",
         )
+
+        if destinatarios is None:
+            destinatarios = list(
+                Empleado.objects.filter(rol="Administrador", estatus="activo").values_list("email", flat=True)
+            )
+
+        if destinatarios:
+            try:
+                _enviar_correo_alerta(alerta, destinatarios)
+                alerta.estado = "Notificada"
+                alerta.fecha_notificacion = timezone.now()
+                alerta.save()
+            except Exception as e:
+                # No tumbamos el dashboard si Gmail está lento/caído un
+                # momento. La alerta se queda "Pendiente": sigue visible
+                # en Alertas y se puede mandar a mano con "Notificar".
+                # Lo imprimimos en la consola de runserver para poder ver
+                # SI y POR QUÉ está fallando el envío automático.
+                print(f"[alertas] No se pudo auto-notificar la alerta de {s.procve.nombre}: {e}")
+
+
+# Recordatorio automático: si una alerta ya se notificó pero nadie la
+# resolvió en 8 horas, se vuelve a mandar el correo (sin cambiar su
+# estado, sigue "Notificada" — la alerta NO desaparece hasta que alguien
+# le dé "Resolver"). No hay un cron/Celery corriendo en este proyecto,
+# así que esto se apoya en que el navegador ya está consultando
+# /dashboard/stats y /alertas cada 25s (ver shared.js): cada vez que
+# alguien con sesión abierta tiene el sistema abierto, esta función
+# revisa si ya toca reenviar. Si nadie tiene el sistema abierto durante
+# 8+ horas seguidas, el recordatorio sale en cuanto alguien vuelva a entrar.
+RECORDATORIO_ALERTA_HORAS = 8
+
+
+def _reenviar_alertas_vencidas():
+    limite = timezone.now() - timedelta(hours=RECORDATORIO_ALERTA_HORAS)
+    vencidas = Alerta.objects.filter(estado="Notificada", fecha_notificacion__lte=limite).select_related("procve")
+    if not vencidas.exists():
+        return
+
+    destinatarios = list(
+        Empleado.objects.filter(rol="Administrador", estatus="activo").values_list("email", flat=True)
+    )
+    if not destinatarios:
+        return
+
+    for alerta in vencidas:
+        try:
+            _enviar_correo_alerta(alerta, destinatarios, es_recordatorio=True)
+            alerta.fecha_notificacion = timezone.now()
+            alerta.save()
+        except Exception:
+            # Si un recordatorio falla (ej. SMTP caído un momento), no
+            # tumbamos el dashboard completo por eso; se reintenta en la
+            # siguiente pasada dentro de otras 8 horas... en realidad en
+            # la siguiente vez que se llame esta función, porque
+            # fecha_notificacion no se actualizó.
+            continue
 
 #stock bajo, ventas del mes, total de productos, total de usuarios
 #/dashboard/stats  las 4 tarjetas de arriba:
@@ -897,6 +965,7 @@ def _sincronizar_alertas():
 @requiere_rol("Administrador", "Vendedor")
 def dashboard_stats_view(request):
     _sincronizar_alertas()
+    _reenviar_alertas_vencidas()
 
     total_productos = Producto.objects.filter(estatus="activo").count()
 
@@ -986,6 +1055,7 @@ def ventas_recientes_view(request):
 @requiere_rol("Administrador", "Vendedor")
 def alertas_view(request):
     _sincronizar_alertas()
+    _reenviar_alertas_vencidas()
 
     page = int(request.GET.get("page", 1))
     limit = int(request.GET.get("limit", 10))
@@ -997,7 +1067,10 @@ def alertas_view(request):
     if tipo:
         qs = qs.filter(tipo=tipo)
     if estado:
-        qs = qs.filter(estado=estado)
+        # Admite uno o varios estados separados por coma (ej. "Pendiente,Notificada")
+        # para poder contar "sigue abierta" sin importar si ya se notificó.
+        estados = [e.strip() for e in estado.split(",") if e.strip()]
+        qs = qs.filter(estado__in=estados)
     if search:
         qs = qs.filter(procve__nombre__icontains=search)
 
@@ -1021,9 +1094,41 @@ def alertas_view(request):
     return JsonResponse({"ok": True, "data": data, "total": total})
 
 
+# Arma y manda el correo de una alerta con la plantilla con estilo
+# (emails/alerta_notificacion.html). Se usa tanto para el botón manual
+# "Notificar" como para los recordatorios automáticos de las 8 horas,
+# así el estilo y el texto siempre salen iguales en los dos casos.
+def _enviar_correo_alerta(alerta, destinatarios, es_recordatorio=False):
+    ahora = timezone.localtime()
+    asunto = f"[Ferretería] Alerta de stock — {alerta.procve.nombre}"
+    if es_recordatorio:
+        asunto = f"[Recordatorio] {asunto}"
+
+    html_content = render_to_string("emails/alerta_notificacion.html", {
+        "tipo": alerta.tipo,
+        "producto": alerta.procve.nombre,
+        "fecha": ahora.strftime("%d de %B de %Y"),
+        "hora": ahora.strftime("%I:%M %p"),
+        "detalle": alerta.descripcion,
+        "es_recordatorio": es_recordatorio,
+        "url_sistema": f"{settings.FRONTEND_URL}/alertas.html",
+    })
+    texto_plano = strip_tags(html_content)
+
+    send_mail(
+        subject=asunto,
+        message=texto_plano,
+        from_email=None,  # usa DEFAULT_FROM_EMAIL
+        recipient_list=destinatarios,
+        html_message=html_content,
+        fail_silently=False,
+    )
+
+
 # /alertas/<id>/notificar — envía el correo de aviso (API externa: Gmail SMTP
 # ya configurado en settings.py) y pasa la alerta a estado 'Notificada'.
-# Si ya fue notificada o resuelta, NO reenvía (evita duplicar avisos).
+# Si ya fue notificada o resuelta, NO reenvía (evita duplicar avisos) —
+# el reenvío automático cada 8h lo hace _reenviar_alertas_vencidas, no este botón.
 @csrf_exempt
 @require_POST
 @requiere_rol("Administrador")
@@ -1045,21 +1150,8 @@ def alerta_notificar_view(request, alertcve):
     if not destinatarios:
         return JsonResponse({"ok": False, "message": "No hay administradores activos con correo registrado"}, status=400)
 
-    asunto = f"[Ferretería] Alerta de stock — {alerta.procve.nombre}"
-    cuerpo = (
-        f"Producto: {alerta.procve.nombre}\n"
-        f"Tipo de alerta: {alerta.tipo}\n"
-        f"Detalle: {alerta.descripcion}\n"
-    )
-
     try:
-        send_mail(
-            subject=asunto,
-            message=cuerpo,
-            from_email=None,  # usa DEFAULT_FROM_EMAIL
-            recipient_list=destinatarios,
-            fail_silently=False,
-        )
+        _enviar_correo_alerta(alerta, destinatarios)
     except Exception as e:
         return JsonResponse({"ok": False, "message": f"No se pudo enviar el correo: {e}"}, status=502)
 
@@ -1567,6 +1659,8 @@ def producto_ui_detail_view(request, procve):
             mov.referencia = "Ajuste manual desde Productos"
             mov.empcve_id = request.usuario_jwt.get("empcve")
             mov.save()
+
+        _sincronizar_alertas()
 
     return JsonResponse({"ok": True})
 

@@ -26,10 +26,7 @@ SECRET_KEY = config('SECRET_KEY')
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = config('DEBUG', default=False, cast=bool)
 
-ALLOWED_HOSTS = config(
-    'ALLOWED_HOSTS',
-    default='localhost,127.0.0.1',
-).split(',')
+ALLOWED_HOSTS = []
 
 
 # Application definition
@@ -58,8 +55,6 @@ CORS_ALLOWED_ORIGINS = [
 # Content-Disposition (ahí viene el nombre del archivo) en respuestas de
 # otro origen, como las descargas de /api/reportes/inventario/.
 CORS_EXPOSE_HEADERS = ["Content-Disposition"]
-
-WSGI_APPLICATION = 'ferreteria_backend.wsgi.application'
 
 ROOT_URLCONF = 'ferreteria_backend.urls'
 
@@ -118,3 +113,19 @@ EMAIL_HOST_USER = config('EMAIL_HOST_USER')
 EMAIL_HOST_PASSWORD = config('EMAIL_HOST_PASSWORD')
 DEFAULT_FROM_EMAIL = f'Ferretería <{EMAIL_HOST_USER}>'
 
+# Para el botón "Ver en el sistema" de los correos de notificación.
+# En Render, define esta variable de entorno con tu dominio real del frontend.
+FRONTEND_URL = config('FRONTEND_URL', default='http://127.0.0.1:5500')
+
+TEMPLATES = [
+    {
+        'BACKEND': 'django.template.backends.django.DjangoTemplates',
+        'DIRS': [],
+        'APP_DIRS': True,   # <- esto debe estar en True
+        'OPTIONS': {
+            'context_processors': [
+                'django.template.context_processors.request',
+            ],
+        },
+    },
+]

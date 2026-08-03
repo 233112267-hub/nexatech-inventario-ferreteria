@@ -82,9 +82,14 @@ checkAuth(); setupLogout(); renderUserInfo();
 let currentPage=1, allAlertas=[];
 
 async function loadKPIs(){
+  // Una alerta "Notificada" sigue siendo un problema real hasta que alguien
+  // le dé Resolver — por eso cuenta igual que Pendiente en estas tarjetas.
+  // Antes solo se contaba Pendiente, así que en cuanto se mandaba el correo
+  // la alerta "desaparecía" de Críticas/Advertencias aunque el producto
+  // siguiera agotado o con stock bajo.
   const [crit,adv,res]=await Promise.all([
-    apiFetch('/alertas?tipo=Crítica&estado=Pendiente&limit=1'),
-    apiFetch('/alertas?tipo=Advertencia&estado=Pendiente&limit=1'),
+    apiFetch('/alertas?tipo=Crítica&estado=Pendiente,Notificada&limit=1'),
+    apiFetch('/alertas?tipo=Advertencia&estado=Pendiente,Notificada&limit=1'),
     apiFetch('/alertas?estado=Resuelta&limit=1'),
   ]);
   document.getElementById('cntCritica').textContent=crit?.total??0;
