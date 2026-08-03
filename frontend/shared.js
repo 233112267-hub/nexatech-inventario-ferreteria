@@ -4,7 +4,7 @@
 
 const API = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
   ? 'http://127.0.0.1:8000/api'
-  : 'https://nexatech-inventario-ferreteria-final.onrender.com/api';
+  : 'https://nexatech-inventario-ferreteria.onrender.com/api';
 
 // ── Auth guard ───────────────────────────────────────────────
 function checkAuth() {
