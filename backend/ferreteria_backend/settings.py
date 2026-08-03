@@ -47,6 +47,10 @@ MIDDLEWARE = [
     'django.middleware.common.CommonMiddleware',
 ]
 
+# Para el botón "Ver en el sistema" de los correos de notificación.
+# En Render, define esta variable de entorno con tu dominio real del frontend.
+FRONTEND_URL = config('FRONTEND_URL', default='http://127.0.0.1:5500')
+
 # Mientras desarrollas localmente; ajusta a tu dominio real en producción
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",
@@ -99,6 +103,7 @@ USE_I18N = True
 USE_TZ = True
 
 
+
 # Static files (CSS, JavaScript, Images)
 STATIC_URL = 'static/'
 
@@ -115,10 +120,6 @@ EMAIL_USE_TLS = True
 EMAIL_HOST_USER = config('EMAIL_HOST_USER')
 EMAIL_HOST_PASSWORD = config('EMAIL_HOST_PASSWORD')
 DEFAULT_FROM_EMAIL = f'Ferretería <{EMAIL_HOST_USER}>'
-
-# Para el botón "Ver en el sistema" de los correos de notificación.
-# En Render, define esta variable de entorno con tu dominio real del frontend.
-FRONTEND_URL = config('FRONTEND_URL', default='http://127.0.0.1:5500')
 
 TEMPLATES = [
     {

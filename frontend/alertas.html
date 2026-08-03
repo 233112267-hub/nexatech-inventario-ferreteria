@@ -76,6 +76,21 @@
   </div>
 </div>
 <div class="toast" id="toast"></div>
+
+<!-- Modal resolver alerta: pedir cuánto stock se está agregando -->
+<div class="modal-overlay" id="modalResolver" onclick="if(event.target===this)closeModal('modalResolver')">
+  <div class="modal" style="max-width:420px;">
+    <div class="modal-header"><h3>Reabastecer producto</h3><button class="modal-close" onclick="closeModal('modalResolver')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div>
+    <p id="resolverProducto" style="color:var(--muted);font-size:.85rem;margin:-.4rem 0 1rem;"></p>
+    <div class="form-field">
+      <label>¿Cuántas unidades vas a agregar?</label>
+      <input type="number" id="resolverCantidad" min="1" step="1">
+    </div>
+    <p style="color:var(--muted);font-size:.78rem;margin-top:-.5rem;">Se suman al stock actual — no lo reemplazan.</p>
+    <div class="modal-footer"><button class="btn-cancel" onclick="closeModal('modalResolver')">Cancelar</button><button class="btn-save" onclick="confirmResolve()">Reabastecer y resolver</button></div>
+  </div>
+</div>
+
 <script src="shared.js"></script>
 <script>
 checkAuth(); setupLogout(); renderUserInfo();
@@ -110,6 +125,7 @@ async function loadAlertas(){
   const params=new URLSearchParams({page:currentPage,limit:8,...(tipo&&{tipo}),...(estado&&{estado})});
   const data=await apiFetch('/alertas?'+params);
   if(!data||!data.ok) return;
+  allAlertas=data.data;
 
   document.getElementById('tableBody').innerHTML=data.data.map(a=>{
     const fecha=a.created_at?new Date(a.created_at).toLocaleString('es-MX',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}):'—';
@@ -121,7 +137,7 @@ async function loadAlertas(){
       <td>${estadoBadge(a.estado)}</td>
       <td style="white-space:nowrap;">
         ${a.estado==='Pendiente'?`<button class="act-notify" onclick="notifyAlert(${a.id})" title="Notificar por correo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 6l-10 7L2 6"/><rect x="2" y="4" width="20" height="16" rx="2"/></svg></button>`:''}
-        ${a.estado!=='Resuelta'?`<button class="act-resolve" onclick="resolveAlert(${a.id})" title="Marcar resuelta"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg></button>`:''}
+        ${a.estado!=='Resuelta'?`<button class="act-resolve" onclick="resolveAlert(${a.id})" title="Reabastecer y resolver"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg></button>`:''}
       </td>
     </tr>`;
   }).join('')||'<tr><td colspan="6" style="text-align:center;padding:2rem;color:var(--muted);">Sin alertas</td></tr>';
@@ -136,17 +152,34 @@ async function notifyAlert(id){
   showToast('Correo de notificación enviado','success');
 }
 
-async function resolveAlert(id){
-  const data=await apiFetch(`/alertas/${id}/resolver`,{method:'PATCH'});
+let resolverAlertaId=null;
+
+function resolveAlert(id){
+  const a=allAlertas.find(x=>x.id===id);
+  if(!a) return;
+  resolverAlertaId=id;
+  document.getElementById('resolverProducto').textContent=`${a.producto_nombre} — ${a.descripcion||''}`;
+  // Sugerencia: lo justo para volver a estar en el mínimo (o 1 si no hay dato de stock).
+  const sugerido=(a.stock_minimo!=null && a.stock_actual!=null)?Math.max(a.stock_minimo-a.stock_actual,1):1;
+  document.getElementById('resolverCantidad').value=sugerido;
+  openModal('modalResolver');
+}
+
+async function confirmResolve(){
+  const cantidad=Number(document.getElementById('resolverCantidad').value);
+  if(!cantidad||cantidad<=0){showToast('Escribe una cantidad válida (mayor a 0)','error');return;}
+  const data=await apiFetch(`/alertas/${resolverAlertaId}/resolver`,{method:'PATCH',body:JSON.stringify({cantidad})});
   if(!data)return;
   if(!data.ok){showToast(data.message||'Error','error');return;}
-  showToast('Alerta marcada como resuelta','success');
+  showToast(`Se agregaron ${cantidad} unidades y la alerta quedó resuelta`,'success');
+  closeModal('modalResolver');
   loadKPIs();loadAlertas();
 }
 
 function clearFilters(){document.getElementById('searchInput').value='';document.getElementById('tipoFilter').value='';document.getElementById('estadoFilter').value='';currentPage=1;loadAlertas();}
 ['searchInput'].forEach(id=>document.getElementById(id).addEventListener('input',()=>{currentPage=1;loadAlertas();}));
 ['tipoFilter','estadoFilter'].forEach(id=>document.getElementById(id).addEventListener('change',()=>{currentPage=1;loadAlertas();}));
+document.addEventListener('keydown',e=>{if(e.key==='Escape')closeModal('modalResolver');});
 loadKPIs();loadAlertas();
 </script>
 </body>

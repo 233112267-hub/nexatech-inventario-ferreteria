@@ -1079,6 +1079,13 @@ def alertas_view(request):
     start = (page - 1) * limit
     alertas = qs[start:start + limit]
 
+    # Para prellenar "¿cuánto vas a agregar?" en el modal de Resolver sin
+    # tener que ir a Productos a verlo primero.
+    stocks = {
+        s.procve_id: s
+        for s in Stock.objects.filter(procve__in=[a.procve_id for a in alertas])
+    }
+
     data = [
         {
             "id": a.alertcve,
@@ -1088,6 +1095,8 @@ def alertas_view(request):
             "producto_nombre": a.procve.nombre if a.procve else None,
             "descripcion": a.descripcion,
             "estado": a.estado,
+            "stock_actual": stocks[a.procve_id].stock_actual if a.procve_id in stocks else None,
+            "stock_minimo": stocks[a.procve_id].stock_minimo if a.procve_id in stocks else None,
         }
         for a in alertas
     ]
