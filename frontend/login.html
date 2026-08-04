@@ -210,7 +210,7 @@
 <script>
 const API = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
   ? 'http://127.0.0.1:8000/api'
-  : 'https://nexatech-inventario-ferreteria.onrender.com/api';
+  : 'https://nexatech-inventario-ferreteria-final.onrender.com/api';
 const btn = document.getElementById('btnLogin');
 const errorMsg = document.getElementById('errorMsg');
 
@@ -224,9 +224,15 @@ document.getElementById('togglePass').addEventListener('click', () => {
 });
 
 btn.addEventListener('click', async () => {
+  const tipoSeleccionado = document.getElementById('tipo').value;
   const user = document.getElementById('usuario').value.trim();
   const pass = document.getElementById('contrasena').value;
   errorMsg.classList.add('d-none');
+  if (!tipoSeleccionado) {
+    errorMsg.textContent = 'Selecciona tu tipo de usuario.';
+    errorMsg.classList.remove('d-none');
+    return;
+  }
   if (!user || !pass) {
     errorMsg.textContent = 'Por favor completa todos los campos.';
     errorMsg.classList.remove('d-none');
@@ -239,10 +245,14 @@ btn.addEventListener('click', async () => {
     // Nota: este login es para personal (empleados). Si algún día
     // agregas login de clientes en esta misma pantalla, necesitarás
     // un selector de "tipo" como hicimos en la primera versión.
+    // "rol_esperado" es lo que la persona eligió en el selector de arriba;
+    // el backend lo compara contra el rol real de la cuenta (Administrador
+    // o Vendedor) y rechaza el login si no coinciden — así nadie entra
+    // "como Administrador" solo porque lo seleccionó en un dropdown.
     const res = await fetch(`${API}/auth/login/`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ tipo: 'empleado', username: user, password: pass })
+      body: JSON.stringify({ tipo: 'empleado', rol_esperado: tipoSeleccionado, username: user, password: pass })
     });
     const data = await res.json();
 
@@ -325,7 +335,7 @@ async function fpEnviarCodigo() {
   const btnSend = document.getElementById('btnSendCode');
   fpSetLoading(btnSend, true);
   try {
-    const res = await fetch(`${API}/auth/forgot-password`, {
+    const res = await fetch(`${API}/auth/forgot-password/`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ correo: email })
@@ -359,7 +369,7 @@ document.getElementById('btnVerifyCode').addEventListener('click', async () => {
   const btnVerify = document.getElementById('btnVerifyCode');
   fpSetLoading(btnVerify, true);
   try {
-    const res = await fetch(`${API}/auth/verify-code`, {
+    const res = await fetch(`${API}/auth/verify-code/`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ correo: fpEmailActual, codigo })
@@ -394,7 +404,7 @@ document.getElementById('btnResetPass').addEventListener('click', async () => {
   const btnReset = document.getElementById('btnResetPass');
   fpSetLoading(btnReset, true);
   try {
-    const res = await fetch(`${API}/auth/reset-password`, {
+    const res = await fetch(`${API}/auth/reset-password/`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ correo: fpEmailActual, codigo, nueva_password: p1 })

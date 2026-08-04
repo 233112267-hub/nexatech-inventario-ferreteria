@@ -69,6 +69,21 @@ def login_view(request):
     if not password_valido:
         return JsonResponse({"error": "Credenciales inválidas"}, status=401)
 
+    # "rol_esperado" es opcional y viene del selector "Tipo de usuario" del
+    # login (Administrador / Empleado). Se valida AQUÍ, después de checar la
+    # contraseña, para no filtrarle a nadie (por el mensaje de error) si una
+    # cuenta existe y qué rol tiene antes de que demuestre que sabe la
+    # contraseña. Un Vendedor que elige "Administrador" (o viceversa) se
+    # rechaza aquí — así el desplegable deja de ser cosmético: si no
+    # coincide con el rol real de la cuenta, no entra.
+    rol_esperado = data.get("rol_esperado")
+    if tipo == "empleado" and rol_esperado in ("administrador", "empleado"):
+        es_admin_real = usuario.rol == "Administrador"
+        if rol_esperado == "administrador" and not es_admin_real:
+            return JsonResponse({"error": "Esta cuenta no tiene permisos de Administrador. Selecciona 'Empleado'."}, status=403)
+        if rol_esperado == "empleado" and es_admin_real:
+            return JsonResponse({"error": "Esta cuenta es de Administrador. Selecciona 'Administrador'."}, status=403)
+
     payload = {
         "tipo": tipo,
         "username": usuario.username,
@@ -779,14 +794,22 @@ def forgot_password_view(request):
         })
         texto_plano = strip_tags(html_content)
 
-        send_mail(
-            subject="Código de recuperación — Ferretería",
-            message=texto_plano,
-            from_email=None,  # usa DEFAULT_FROM_EMAIL
-            recipient_list=[correo],
-            html_message=html_content,
-            fail_silently=False,
-        )
+        try:
+            send_mail(
+                subject="Código de recuperación — Ferretería",
+                message=texto_plano,
+                from_email=None,  # usa DEFAULT_FROM_EMAIL
+                recipient_list=[correo],
+                html_message=html_content,
+                fail_silently=False,
+            )
+        except Exception as e:
+            # No revelamos el error al cliente (mismo principio de no
+            # filtrar si el correo existe), pero sí lo dejamos en la
+            # consola de runserver para poder diagnosticar un problema
+            # real de SMTP en vez de que el código "nunca llegue" sin
+            # ninguna pista de por qué.
+            print(f"[forgot_password] No se pudo enviar el correo a {correo}: {e}")
 
     return JsonResponse({"ok": True})
 
