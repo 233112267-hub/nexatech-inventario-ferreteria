@@ -126,12 +126,35 @@
     <div style="font-size:3rem;margin-bottom:.8rem;">✅</div>
     <h3 style="margin-bottom:.4rem;">¡Venta registrada!</h3>
     <p style="color:var(--muted);font-size:.88rem;margin-bottom:1.2rem;" id="ventaFolioMsg"></p>
-    <div style="display:flex;gap:.7rem;justify-content:center;">
+    <div style="display:flex;gap:.7rem;justify-content:center;flex-wrap:wrap;">
       <button class="btn-cancel" onclick="closeModal('modalOK')">Cerrar</button>
+      <button class="btn-save" onclick="imprimirComprobante()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;vertical-align:-3px;margin-right:4px;"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>Ver comprobante</button>
       <a href="movimientos.html" class="btn-save" style="text-decoration:none;display:inline-flex;align-items:center;">Ver movimientos</a>
     </div>
   </div>
 </div>
+
+<!-- Comprobante: se muestra como mensaje dentro de la página (no ventana
+     emergente, para que nunca lo bloquee el navegador). El botón
+     "Imprimir" de aquí adentro sí manda a la impresora del sistema, usando
+     las reglas @media print de abajo para que solo se imprima el ticket. -->
+<div class="modal-overlay" id="modalRecibo" onclick="if(event.target===this)closeModal('modalRecibo')">
+  <div class="modal" style="max-width:380px;">
+    <div class="modal-header no-print"><h3>Comprobante de venta</h3><button class="modal-close" onclick="closeModal('modalRecibo')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div>
+    <div id="reciboContenido"></div>
+    <div class="modal-footer no-print"><button class="btn-cancel" onclick="closeModal('modalRecibo')">Cerrar</button><button class="btn-save" onclick="window.print()">Imprimir</button></div>
+  </div>
+</div>
+
+<style>
+  @media print{
+    body *{ visibility:hidden; }
+    #modalRecibo, #modalRecibo *{ visibility:visible; }
+    #modalRecibo{ position:absolute; top:0; left:0; width:100%; background:#fff; }
+    .no-print{ display:none !important; }
+  }
+</style>
+
 <div class="toast" id="toast"></div>
 <script src="shared.js"></script>
 <script>
@@ -223,6 +246,7 @@ function renderCart(){
 }
 
 // Finalizar venta → POST al API
+let ultimaVenta=null;
 document.getElementById('btnFinalizar').addEventListener('click', async ()=>{
   if(!cart.length){showToast('Agrega al menos un producto','error');return;}
   const btn=document.getElementById('btnFinalizar');
@@ -238,12 +262,56 @@ document.getElementById('btnFinalizar').addEventListener('click', async ()=>{
   if(!data)return;
   if(!data.ok){showToast(data.message||'Error al procesar la venta','error');return;}
   document.getElementById('ventaFolioMsg').textContent=`Folio: ${data.folio} — Total: $${Number(data.venta.total).toFixed(2)}`;
+  ultimaVenta={folio:data.folio, ...data.venta, clienteTexto:clienteNombre||'Mostrador'};
   cart=[];renderCart();
   openModal('modalOK');
   loadProds(); // refrescar stock
 });
 
-document.addEventListener('keydown',e=>{if(e.key==='Escape')closeModal('modalOK');});
+function imprimirComprobante(){
+  if(!ultimaVenta){showToast('No hay una venta reciente para mostrar','error');return;}
+  const v=ultimaVenta;
+  const suc=v.sucursal;
+  const direccionSucursal=suc?[suc.direccion, suc.referencia, `${suc.localidad}, ${suc.municipio}, ${suc.estado}`].filter(Boolean).join(' — '):'';
+  const filas=v.detalles.map(d=>`
+    <tr>
+      <td>${d.producto}<br><span style="color:#888;font-size:.7rem;">${d.codigo}</span></td>
+      <td style="text-align:center;">${d.cantidad}</td>
+      <td style="text-align:right;">$${Number(d.precio).toFixed(2)}</td>
+      <td style="text-align:right;">$${Number(d.subtotal).toFixed(2)}</td>
+    </tr>`).join('');
+
+  document.getElementById('reciboContenido').innerHTML=`
+    <div style="font-family:'Courier New',monospace;color:#111;">
+      <h2 style="text-align:center;margin:0 0 2px;font-size:1.05rem;">🔨 FERRETERÍA</h2>
+      <div style="text-align:center;font-size:.72rem;color:#555;margin-bottom:8px;">Soluciones que construyen</div>
+      ${direccionSucursal?`<div style="text-align:center;font-size:.7rem;color:#555;margin-bottom:8px;">${direccionSucursal}</div>`:''}
+      <div style="border-top:1px dashed #999;margin:8px 0;"></div>
+      <div style="display:flex;justify-content:space-between;font-size:.8rem;margin:2px 0;"><span>Folio</span><strong>${v.folio}</strong></div>
+      <div style="display:flex;justify-content:space-between;font-size:.8rem;margin:2px 0;"><span>Fecha</span><span>${v.fecha||''}</span></div>
+      <div style="display:flex;justify-content:space-between;font-size:.8rem;margin:2px 0;"><span>Cliente</span><span>${v.clienteTexto}</span></div>
+      <div style="display:flex;justify-content:space-between;font-size:.8rem;margin:2px 0;"><span>Atendió</span><span>${v.empleado||''}</span></div>
+      <div style="display:flex;justify-content:space-between;font-size:.8rem;margin:2px 0;"><span>Pago</span><span>${(v.metodo_pago||'').replace(/^./,c=>c.toUpperCase())}</span></div>
+      <div style="border-top:1px dashed #999;margin:8px 0;"></div>
+      <table style="width:100%;border-collapse:collapse;font-size:.75rem;">
+        <thead><tr>
+          <th style="text-align:left;border-bottom:1px solid #333;padding:4px 2px;font-size:.7rem;">Producto</th>
+          <th style="text-align:center;border-bottom:1px solid #333;padding:4px 2px;font-size:.7rem;">Cant.</th>
+          <th style="text-align:right;border-bottom:1px solid #333;padding:4px 2px;font-size:.7rem;">P.U.</th>
+          <th style="text-align:right;border-bottom:1px solid #333;padding:4px 2px;font-size:.7rem;">Subt.</th>
+        </tr></thead>
+        <tbody>${filas}</tbody>
+      </table>
+      <div style="border-top:1px dashed #999;margin:8px 0;"></div>
+      <div style="display:flex;justify-content:space-between;font-size:1rem;font-weight:bold;"><span>TOTAL</span><span>$${Number(v.total).toFixed(2)}</span></div>
+      <div style="text-align:center;font-size:.7rem;color:#555;margin-top:14px;">¡Gracias por su compra!<br>Este comprobante no es un CFDI fiscal.</div>
+    </div>`;
+
+  closeModal('modalOK');
+  openModal('modalRecibo');
+}
+
+document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeModal('modalOK');closeModal('modalRecibo');}});
 loadProds();
 mostrarVendedorActual();
 </script>

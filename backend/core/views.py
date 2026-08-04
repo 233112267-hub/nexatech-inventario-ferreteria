@@ -697,11 +697,12 @@ def crear_venta_view(request):
 
     venta.refresh_from_db()
 
-    detalles = DetalleVenta.objects.filter(vencve=venta)
+    detalles = DetalleVenta.objects.filter(vencve=venta).select_related("procve")
     detalles_data = [
         {
             "detcve": d.detcve,
             "producto": d.procve.nombre,
+            "codigo": d.procve.modelo or f"PROD-{d.procve_id:04d}",
             "cantidad": d.cantidad,
             "precio": str(d.precio),
             "subtotal": str(d.subtotal),
@@ -709,16 +710,30 @@ def crear_venta_view(request):
         for d in detalles
     ]
 
+    sucursal = empleado.surcve
+    sucursal_data = None
+    if sucursal:
+        sucursal_data = {
+            "direccion": sucursal.direccion,
+            "localidad": sucursal.localidad,
+            "municipio": sucursal.municipio,
+            "estado": sucursal.estado,
+            "referencia": sucursal.referencia,
+        }
+
     return JsonResponse({
         "ok": True,
         "mensaje": "Venta creada correctamente",
         "folio": f"V-{venta.vencve:04d}",
         "venta": {
             "vencve": venta.vencve,
+            "fecha": venta.fecha.strftime("%d/%m/%Y") if venta.fecha else None,
             "total": str(venta.total),
             "subtotal": str(venta.subtotal),
+            "metodo_pago": venta.metodo_pago,
             "empleado": empleado.nombre,
             "cliente": cliente.nombre if cliente else None,
+            "sucursal": sucursal_data,
             "detalles": detalles_data,
         }
     }, status=201)
