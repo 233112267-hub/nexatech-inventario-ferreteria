@@ -2107,8 +2107,32 @@ def movimientos_view(request):
     return JsonResponse({"ok": True, "data": data, "total": total})
 
 import google.generativeai as genai
+from .jwt_utils import requiere_rol
 
 genai.configure(api_key=settings.GEMINI_API_KEY)
+
+CHATBOT_TOOLS = [
+    {
+        "function_declarations": [
+            {
+                "name": "consultar_stock",
+                "description": "Consulta el stock actual, precio y categoría real de uno o más productos por nombre (búsqueda parcial). Úsala SIEMPRE que te pregunten por stock, existencias o precio de un producto específico.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "nombre_producto": {"type": "string", "description": "Nombre o parte del nombre del producto a buscar"}
+                    },
+                    "required": ["nombre_producto"]
+                }
+            },
+            {
+                "name": "productos_bajo_stock",
+                "description": "Devuelve la lista real de productos agotados o con stock por debajo del mínimo. Úsala cuando pregunten qué productos están bajos, agotados o necesitan reabastecerse.",
+                "parameters": {"type": "object", "properties": {}}
+            }
+        ]
+    }
+]
 
 @csrf_exempt
 @require_POST
@@ -2117,36 +2141,38 @@ def chatbot_view(request):
     try:
         data = json.loads(request.body)
         mensaje = data.get('mensaje', '').strip()
-        historial = data.get('historial', [])  # [{rol:'user'/'model', texto:'...'}, ...]
+        historial = data.get('historial', [])
 
         if not mensaje:
             return JsonResponse({"error": "Mensaje vacío"}, status=400)
 
         usuario = request.usuario_jwt
         rol = usuario.get('rol')
-        nombre = usuario.get('nombre', '') or usuario.get('username', '')
+        nombre = usuario.get('nombre', '')
 
         if rol == 'Administrador':
             contexto_rol = (
                 "El usuario es ADMINISTRADOR: tiene acceso total al sistema "
-                "(reportes, usuarios, ventas, inventario). Puedes ayudarle con "
-                "cualquier tema del sistema."
+                "(reportes, usuarios, ventas, inventario)."
             )
         else:
             contexto_rol = (
                 "El usuario es VENDEDOR: solo tiene acceso a ventas, consulta de "
                 "inventario y movimientos. NO tiene acceso a reportes ni gestión "
-                "de usuarios. Si pregunta por algo fuera de su rol, recuérdale "
-                "amablemente que esa función es solo para Administradores."
+                "de usuarios."
             )
 
-        system_prompt = f"""Eres el asistente virtual de NexaFerretería, un sistema
-de inventario para ferretería. Hablas en español, tono breve y amigable.
-Estás atendiendo a {nombre}. {contexto_rol}"""
+        system_prompt = f"""Eres el asistente virtual de NexaFerretería. Hablas en
+español, tono breve y amigable. Atiendes a {nombre}. {contexto_rol}
+IMPORTANTE: Nunca inventes cifras de stock, precio o inventario. Cuando te
+pregunten por un producto específico usa la función consultar_stock, y para
+productos bajos de stock usa productos_bajo_stock. Solo responde con los
+datos reales que esas funciones te regresen."""
 
         model = genai.GenerativeModel(
             model_name="gemini-flash-latest",
-            system_instruction=system_prompt
+            system_instruction=system_prompt,
+            tools=CHATBOT_TOOLS,
         )
 
         chat_history = [
@@ -2155,9 +2181,69 @@ Estás atendiendo a {nombre}. {contexto_rol}"""
         chat = model.start_chat(history=chat_history)
         respuesta = chat.send_message(mensaje)
 
+        # Si Gemini pidió ejecutar una función, la corremos nosotros contra
+        # la BD real y le regresamos el resultado para que arme la respuesta.
+        parte = respuesta.candidates[0].content.parts[0]
+        if hasattr(parte, "function_call") and parte.function_call and parte.function_call.name:
+            nombre_funcion = parte.function_call.name
+            args = dict(parte.function_call.args)
+
+            if nombre_funcion == "consultar_stock":
+                resultado = _consultar_stock(args.get("nombre_producto", ""))
+            elif nombre_funcion == "productos_bajo_stock":
+                resultado = _productos_bajo_stock_tool()
+            else:
+                resultado = {"error": "función no reconocida"}
+
+            respuesta = chat.send_message(
+                genai.protos.Content(
+                    parts=[genai.protos.Part(
+                        function_response=genai.protos.FunctionResponse(
+                            name=nombre_funcion,
+                            response={"result": resultado}
+                        )
+                    )]
+                )
+            )
+
         return JsonResponse({"respuesta": respuesta.text, "rol": rol})
 
     except Exception as e:
         import traceback
         traceback.print_exc()
         return JsonResponse({"error": str(e)}, status=500)
+
+def _consultar_stock(nombre_producto):
+    """Busca productos por nombre (coincidencia parcial) y regresa su stock real."""
+    productos = Producto.objects.filter(
+        nombre__icontains=nombre_producto, estatus="activo"
+    ).select_related("catcve")[:5]
+
+    if not productos.exists():
+        return {"encontrado": False, "mensaje": f"No encontré ningún producto que coincida con '{nombre_producto}'"}
+
+    stocks = {s.procve_id: s for s in Stock.objects.filter(procve__in=productos)}
+    resultados = []
+    for p in productos:
+        s = stocks.get(p.procve)
+        resultados.append({
+            "nombre": p.nombre,
+            "codigo": p.modelo or f"PROD-{p.procve:04d}",
+            "categoria": p.catcve.nombre if p.catcve else None,
+            "precio": float(p.precio),
+            "stock_actual": s.stock_actual if s else 0,
+            "stock_minimo": s.stock_minimo if s else 0,
+        })
+    return {"encontrado": True, "productos": resultados}
+
+
+def _productos_bajo_stock_tool():
+    """Lista productos agotados o por debajo del mínimo (dato real de Stock)."""
+    stocks = Stock.objects.filter(
+        Q(stock_actual=0) | Q(stock_actual__lt=F("stock_minimo"))
+    ).select_related("procve").order_by("stock_actual")[:15]
+
+    return {"productos": [
+        {"nombre": s.procve.nombre, "stock_actual": s.stock_actual, "stock_minimo": s.stock_minimo}
+        for s in stocks
+    ]}
