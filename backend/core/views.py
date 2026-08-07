@@ -2105,3 +2105,59 @@ def movimientos_view(request):
     data = todos[start:start + limit]
 
     return JsonResponse({"ok": True, "data": data, "total": total})
+
+import google.generativeai as genai
+
+genai.configure(api_key=settings.GEMINI_API_KEY)
+
+@csrf_exempt
+@require_POST
+@requiere_rol('Administrador', 'Vendedor')
+def chatbot_view(request):
+    try:
+        data = json.loads(request.body)
+        mensaje = data.get('mensaje', '').strip()
+        historial = data.get('historial', [])  # [{rol:'user'/'model', texto:'...'}, ...]
+
+        if not mensaje:
+            return JsonResponse({"error": "Mensaje vacío"}, status=400)
+
+        usuario = request.usuario_jwt
+        rol = usuario.get('rol')
+        nombre = usuario.get('nombre', '') or usuario.get('username', '')
+
+        if rol == 'Administrador':
+            contexto_rol = (
+                "El usuario es ADMINISTRADOR: tiene acceso total al sistema "
+                "(reportes, usuarios, ventas, inventario). Puedes ayudarle con "
+                "cualquier tema del sistema."
+            )
+        else:
+            contexto_rol = (
+                "El usuario es VENDEDOR: solo tiene acceso a ventas, consulta de "
+                "inventario y movimientos. NO tiene acceso a reportes ni gestión "
+                "de usuarios. Si pregunta por algo fuera de su rol, recuérdale "
+                "amablemente que esa función es solo para Administradores."
+            )
+
+        system_prompt = f"""Eres el asistente virtual de NexaFerretería, un sistema
+de inventario para ferretería. Hablas en español, tono breve y amigable.
+Estás atendiendo a {nombre}. {contexto_rol}"""
+
+        model = genai.GenerativeModel(
+            model_name="gemini-flash-latest",
+            system_instruction=system_prompt
+        )
+
+        chat_history = [
+            {"role": h["rol"], "parts": [h["texto"]]} for h in historial
+        ]
+        chat = model.start_chat(history=chat_history)
+        respuesta = chat.send_message(mensaje)
+
+        return JsonResponse({"respuesta": respuesta.text, "rol": rol})
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return JsonResponse({"error": str(e)}, status=500)

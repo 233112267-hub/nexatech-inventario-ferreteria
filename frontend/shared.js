@@ -13,6 +13,7 @@ function checkAuth() {
   enforceRoleAccess();
   applyNavRoleVisibility();
   startAlertPolling();
+  initChatbotWidget();
   return token;
 }
 
@@ -135,6 +136,122 @@ function renderUserInfo() {
     const n = user.nombre || 'AD';
     el.textContent = n.split(' ').map(w => w[0]).slice(0,2).join('').toUpperCase();
   });
+}
+
+// ── Chatbot flotante (Gemini) ──────────────────────────────────
+let _chatHistory = []; // [{rol:'user'|'model', texto:'...'}, ...]
+let _chatIniciado = false;
+
+function initChatbotWidget() {
+  if (document.getElementById('chatbotBubble')) return; // ya inyectado
+
+  const user = JSON.parse(localStorage.getItem('user') || '{}');
+  const rol = localStorage.getItem('rol') || user.rol || 'Vendedor';
+
+  const bubble = document.createElement('button');
+  bubble.id = 'chatbotBubble';
+  bubble.className = 'chatbot-bubble';
+  bubble.setAttribute('aria-label', 'Abrir asistente');
+  bubble.innerHTML = `
+    <span class="chatbot-dot"></span>
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/>
+    </svg>`;
+
+  const panel = document.createElement('div');
+  panel.id = 'chatbotPanel';
+  panel.className = 'chatbot-panel';
+  panel.innerHTML = `
+    <div class="chatbot-header">
+      <div class="chatbot-header-info">
+        <strong>Asistente NexaFerretería</strong>
+        <span class="chatbot-role-badge">${rol}</span>
+      </div>
+      <button class="chatbot-close" aria-label="Cerrar">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div class="chatbot-messages" id="chatbotMessages"></div>
+    <div class="chatbot-input-row">
+      <input type="text" id="chatbotInput" placeholder="Escribe tu pregunta..." maxlength="500" />
+      <button id="chatbotSend" aria-label="Enviar">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+      </button>
+    </div>`;
+
+  document.body.appendChild(bubble);
+  document.body.appendChild(panel);
+
+  bubble.addEventListener('click', toggleChatbot);
+  panel.querySelector('.chatbot-close').addEventListener('click', toggleChatbot);
+  panel.querySelector('#chatbotSend').addEventListener('click', sendChatbotMessage);
+  panel.querySelector('#chatbotInput').addEventListener('keydown', e => {
+    if (e.key === 'Enter') sendChatbotMessage();
+  });
+}
+
+function toggleChatbot() {
+  const panel = document.getElementById('chatbotPanel');
+  panel.classList.toggle('open');
+  if (panel.classList.contains('open')) {
+    document.getElementById('chatbotInput').focus();
+    if (!_chatIniciado) {
+      _chatIniciado = true;
+      const rol = localStorage.getItem('rol') || 'Vendedor';
+      addChatMessage(
+        rol === 'Administrador'
+          ? '¡Hola! Estás conectado como Administrador. Puedo ayudarte con inventario, ventas, reportes o usuarios. ¿Qué necesitas?'
+          : '¡Hola! Estás conectado como Vendedor. Puedo ayudarte a consultar stock, ventas y movimientos. ¿Qué necesitas?',
+        'bot'
+      );
+    }
+  }
+}
+
+function addChatMessage(texto, tipo) {
+  const cont = document.getElementById('chatbotMessages');
+  const div = document.createElement('div');
+  div.className = `chatbot-msg ${tipo}`;
+  div.textContent = texto;
+  cont.appendChild(div);
+  cont.scrollTop = cont.scrollHeight;
+  return div;
+}
+
+async function sendChatbotMessage() {
+  const input = document.getElementById('chatbotInput');
+  const btn = document.getElementById('chatbotSend');
+  const mensaje = input.value.trim();
+  if (!mensaje) return;
+
+  addChatMessage(mensaje, 'user');
+  input.value = '';
+  input.disabled = true;
+  btn.disabled = true;
+
+  const typingEl = addChatMessage('Escribiendo...', 'bot typing');
+
+  const data = await apiFetch('/chatbot', {
+    method: 'POST',
+    body: JSON.stringify({ mensaje, historial: _chatHistory })
+  });
+
+  typingEl.remove();
+  input.disabled = false;
+  btn.disabled = false;
+  input.focus();
+
+  if (!data || !data.ok && !data.respuesta) {
+    addChatMessage('No pude conectar con el asistente. Intenta de nuevo.', 'bot');
+    return;
+  }
+
+  const respuesta = data.respuesta || 'No obtuve respuesta, intenta de nuevo.';
+  addChatMessage(respuesta, 'bot');
+
+  _chatHistory.push({ rol: 'user', texto: mensaje });
+  _chatHistory.push({ rol: 'model', texto: respuesta });
+  if (_chatHistory.length > 12) _chatHistory = _chatHistory.slice(-12); // limita contexto
 }
 
 // ── Paginación helper ─────────────────────────────────────────

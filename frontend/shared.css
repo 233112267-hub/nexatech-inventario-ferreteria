@@ -369,10 +369,94 @@ td { padding: 0.8rem 1rem; vertical-align: middle; }
 .toast.success { border-left: 4px solid var(--green); }
 .toast.error   { border-left: 4px solid var(--red); }
 
+/* ── CHATBOT FLOTANTE ────────────────────────────── */
+.chatbot-bubble {
+  position: fixed; bottom: 1.5rem; left: calc(var(--sidebar-w) + 1.5rem);
+  width: 56px; height: 56px; border-radius: 50%;
+  background: var(--navy); color: var(--gold);
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 4px 14px rgba(0,0,0,0.25);
+  cursor: pointer; border: none; z-index: 500;
+  transition: transform 0.2s, background 0.2s;
+}
+.chatbot-bubble:hover { transform: scale(1.06); background: var(--navy-hover); }
+.chatbot-bubble svg { width: 26px; height: 26px; }
+.chatbot-bubble .chatbot-dot {
+  position: absolute; top: 2px; right: 2px;
+  width: 12px; height: 12px; border-radius: 50%;
+  background: var(--green); border: 2px solid var(--white);
+}
+
+.chatbot-panel {
+  position: fixed; bottom: 5.6rem; left: calc(var(--sidebar-w) + 1.5rem);
+  width: 340px; max-width: calc(100vw - 2rem);
+  height: 480px; max-height: 70vh;
+  background: var(--white); border-radius: 14px;
+  box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+  display: flex; flex-direction: column; overflow: hidden;
+  z-index: 500; opacity: 0; transform: translateY(12px) scale(0.98);
+  pointer-events: none; transition: opacity 0.18s, transform 0.18s;
+}
+.chatbot-panel.open { opacity: 1; transform: translateY(0) scale(1); pointer-events: auto; }
+
+.chatbot-header {
+  background: var(--navy); color: white; padding: 0.9rem 1rem;
+  display: flex; align-items: center; justify-content: space-between; flex-shrink: 0;
+}
+.chatbot-header-info { display: flex; flex-direction: column; gap: 0.15rem; }
+.chatbot-header-info strong { font-size: 0.88rem; }
+.chatbot-role-badge {
+  font-size: 0.65rem; font-weight: 700; text-transform: uppercase;
+  color: var(--navy); background: var(--gold);
+  padding: 0.1rem 0.5rem; border-radius: 20px; width: fit-content;
+}
+.chatbot-close {
+  background: none; border: none; color: rgba(255,255,255,0.7); cursor: pointer;
+  width: 26px; height: 26px; display: flex; align-items: center; justify-content: center;
+}
+.chatbot-close:hover { color: white; }
+
+.chatbot-messages {
+  flex: 1; overflow-y: auto; padding: 1rem; display: flex; flex-direction: column; gap: 0.6rem;
+  background: var(--bg);
+}
+.chatbot-msg {
+  max-width: 82%; padding: 0.55rem 0.8rem; border-radius: 12px;
+  font-size: 0.85rem; line-height: 1.4; white-space: pre-wrap;
+}
+.chatbot-msg.bot {
+  background: var(--white); color: var(--text); align-self: flex-start;
+  border: 1px solid var(--border); border-bottom-left-radius: 3px;
+}
+.chatbot-msg.user {
+  background: var(--blue); color: white; align-self: flex-end;
+  border-bottom-right-radius: 3px;
+}
+.chatbot-msg.typing { color: var(--muted); font-style: italic; }
+
+.chatbot-input-row {
+  display: flex; gap: 0.5rem; padding: 0.7rem; border-top: 1px solid var(--border);
+  background: var(--white); flex-shrink: 0;
+}
+.chatbot-input-row input {
+  flex: 1; border: 1px solid var(--border); border-radius: 8px;
+  padding: 0.5rem 0.7rem; font-family: 'Nunito', sans-serif; font-size: 0.85rem;
+}
+.chatbot-input-row input:focus { outline: none; border-color: var(--blue); }
+.chatbot-input-row button {
+  background: var(--navy); color: var(--gold); border: none; border-radius: 8px;
+  width: 38px; flex-shrink: 0; cursor: pointer; display: flex; align-items: center; justify-content: center;
+}
+.chatbot-input-row button:hover { background: var(--navy-hover); }
+.chatbot-input-row button:disabled { opacity: 0.5; cursor: not-allowed; }
+
 /* ── RESPONSIVE ──────────────────────────────────── */
 @media (max-width: 768px) {
   .sidebar { transform: translateX(-100%); }
   .sidebar.open { transform: translateX(0); }
   .main { margin-left: 0; }
   .form-row { grid-template-columns: 1fr; }
+
+  .chatbot-bubble, .chatbot-panel { left: auto; right: 1.5rem; }
+  .chatbot-panel { bottom: 5.6rem; width: calc(100vw - 2rem); }
 }

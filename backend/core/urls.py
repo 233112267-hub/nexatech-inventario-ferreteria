@@ -59,5 +59,5 @@ urlpatterns = [
     path('api/categorias/crear/', views.crear_categoria_view),
     path('api/categorias/listar/', views.listar_categorias_view),
     path('api/categorias/<int:catcve>/', views.actualizar_categoria_view),
-
+    path('api/chatbot/', views.chatbot_view),
 ]
