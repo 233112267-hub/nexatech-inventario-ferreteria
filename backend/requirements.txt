@@ -8,5 +8,6 @@ bcrypt==5.0.0
 gunicorn==23.0.0
 openpyxl==3.1.5
 reportlab==4.0.0
-pip freeze > requirements.txt
 python-dotenv==0.21.0
+gemini==0.1.0
+
