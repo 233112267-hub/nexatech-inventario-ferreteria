@@ -49,14 +49,32 @@ MIDDLEWARE = [
 
 # Para el botón "Ver en el sistema" de los correos de notificación.
 # En Render, define esta variable de entorno con tu dominio real del frontend.
-FRONTEND_URL = config('FRONTEND_URL', default='http://127.0.0.1:5500')
+FRONTEND_URL = config(
+    'FRONTEND_URL',
+     default='http://127.0.0.1:5500'
+     )
 
 # Mientras desarrollas localmente; ajusta a tu dominio real en producción
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",
-    "http://127.0.0.1:5500",  # si usas Live Server para el frontend vanilla JS
-     FRONTEND_URL,    
+    "http://127.0.0.1:5500",
+    "https://nexatech-inventario-ferreteria.vercel.app",
 ]
+
+CORS_ALLOW_CREDENTIALS = True
+
+CORS_ALLOW_HEADERS = [
+    'accept',
+    'accept-encoding',
+    'authorization',
+    'content-type',
+    'origin',
+    'user-agent',
+    'x-csrftoken',
+    'x-requested-with',
+]
+
+
 
 # Sin esto, el navegador bloquea que el JS del frontend lea el header
 # Content-Disposition (ahí viene el nombre del archivo) en respuestas de
