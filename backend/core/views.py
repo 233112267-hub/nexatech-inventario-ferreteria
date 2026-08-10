@@ -1166,6 +1166,7 @@ def _enviar_correo_alerta(alerta, destinatarios, es_recordatorio=False):
         "es_recordatorio": es_recordatorio,
         "url_sistema": f"{settings.FRONTEND_URL}/alertas.html",
     })
+    _enviar_correo_brevo(destinatarios, asunto, html_content)
     texto_plano = strip_tags(html_content)
 
     send_mail(
