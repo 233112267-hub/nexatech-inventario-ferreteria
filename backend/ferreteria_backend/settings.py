@@ -61,6 +61,10 @@ CORS_ALLOWED_ORIGINS = [
     "https://nexatech-inventario-ferreteria.vercel.app",
 ]
 
+CORS_ALLOWED_ORIGIN_REGEXES = [
+    r"^https://nexatech-inventario-ferreteria-[a-z0-9-]+\.vercel\.app$",
+]
+
 CORS_ALLOW_CREDENTIALS = True
 
 CORS_ALLOW_HEADERS = [
