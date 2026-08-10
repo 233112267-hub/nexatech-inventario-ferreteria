@@ -1146,11 +1146,6 @@ def alertas_view(request):
     ]
     return JsonResponse({"ok": True, "data": data, "total": total})
 
-
-# Arma y manda el correo de una alerta con la plantilla con estilo
-# (emails/alerta_notificacion.html). Se usa tanto para el botón manual
-# "Notificar" como para los recordatorios automáticos de las 8 horas,
-# así el estilo y el texto siempre salen iguales en los dos casos.
 def _enviar_correo_alerta(alerta, destinatarios, es_recordatorio=False):
     ahora = timezone.localtime()
     asunto = f"[Ferretería] Alerta de stock — {alerta.procve.nombre}"
@@ -1166,18 +1161,8 @@ def _enviar_correo_alerta(alerta, destinatarios, es_recordatorio=False):
         "es_recordatorio": es_recordatorio,
         "url_sistema": f"{settings.FRONTEND_URL}/alertas.html",
     })
+
     _enviar_correo_brevo(destinatarios, asunto, html_content)
-    texto_plano = strip_tags(html_content)
-
-    send_mail(
-        subject=asunto,
-        message=texto_plano,
-        from_email=None,  # usa DEFAULT_FROM_EMAIL
-        recipient_list=destinatarios,
-        html_message=html_content,
-        fail_silently=False,
-    )
-
 
 # /alertas/<id>/notificar — envía el correo de aviso (API externa: Gmail SMTP
 # ya configurado en settings.py) y pasa la alerta a estado 'Notificada'.
