@@ -25,6 +25,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.db import transaction, DatabaseError, connection
 from django.utils import timezone
 from django.conf import settings
+import requests
 from .models import Empleado, Cliente
 from .models import Empleado, Cliente, Producto, Categoria, Surcusal, Venta, DetalleVenta
 from .models import Empleado, Cliente, Producto, Categoria, Surcusal
@@ -767,6 +768,24 @@ from django.core.mail import send_mail
 from django.template.loader import render_to_string
 from django.utils.html import strip_tags
 
+def _enviar_correo_brevo(destinatarios, asunto, html_content):
+    """Envía correo vía la API HTTPS de Brevo (no SMTP), porque Render free
+    bloquea conexiones SMTP salientes y eso tumba el worker con timeout."""
+    url = "https://api.brevo.com/v3/smtp/email"
+    headers = {
+        "accept": "application/json",
+        "api-key": settings.BREVO_API_KEY,
+        "content-type": "application/json",
+    }
+    payload = {
+        "sender": {"name": "Ferretería", "email": settings.EMAIL_HOST_USER},
+        "to": [{"email": d} for d in destinatarios],
+        "subject": asunto,
+        "htmlContent": html_content,
+    }
+    response = requests.post(url, json=payload, headers=headers, timeout=10)
+    response.raise_for_status()
+    return response.json()
 
 def _buscar_usuario_por_email(email):
     """Busca en empleado y luego en cliente. Regresa (usuario, tipo) o (None, None)."""
@@ -810,22 +829,9 @@ def forgot_password_view(request):
         texto_plano = strip_tags(html_content)
 
         try:
-            send_mail(
-                subject="Código de recuperación — Ferretería",
-                message=texto_plano,
-                from_email=None,  # usa DEFAULT_FROM_EMAIL
-                recipient_list=[correo],
-                html_message=html_content,
-                fail_silently=False,
-            )
+            _enviar_correo_brevo([correo], "Código de recuperación — Ferretería", html_content)
         except Exception as e:
-            # No revelamos el error al cliente (mismo principio de no
-            # filtrar si el correo existe), pero sí lo dejamos en la
-            # consola de runserver para poder diagnosticar un problema
-            # real de SMTP en vez de que el código "nunca llegue" sin
-            # ninguna pista de por qué.
             print(f"[forgot_password] No se pudo enviar el correo a {correo}: {e}")
-
     return JsonResponse({"ok": True})
 
 

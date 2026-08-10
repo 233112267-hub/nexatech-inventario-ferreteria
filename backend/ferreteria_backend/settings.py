@@ -163,3 +163,4 @@ load_dotenv()
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
+BREVO_API_KEY = config('BREVO_API_KEY')
